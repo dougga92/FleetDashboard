@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Fotomentum Fleet</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark">📍</span>
+      <span class="brand-name">Fotomentum <span class="brand-sub">Fleet</span></span>
+    </div>
+    <div class="top-right">
+      <span id="updated" class="updated">connecting…</span>
+      <span id="live" class="live-dot" title="auto-refreshing"></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="summary" id="summary" aria-label="Fleet summary"></section>
+    <section class="grid" id="grid" aria-label="Venues"></section>
+    <p class="empty" id="empty" hidden>No venues have reported yet. Once a venue's <code>TELEMETRY_URL</code> points here, it appears within a minute.</p>
+  </main>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
