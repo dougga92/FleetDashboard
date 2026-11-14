@@ -17,6 +17,8 @@ function renderSummary(s) {
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
+    { label: 'All events to date', value: money(s.eventRevenue), cls: '',
+      sub: `${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}` },
     { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}` },
     { label: "Today's sessions", value: s.todaySessions, cls: '', sub: 'across the fleet' },
     { label: 'Printers down', value: s.printersDown, cls: s.printersDown ? 'bad' : 'ok',
@@ -28,6 +30,19 @@ function renderSummary(s) {
       <div class="tile-value ${t.cls}">${esc(t.value)}</div>
       <div class="tile-sub">${esc(t.sub)}</div>
     </div>`).join('');
+}
+
+// Running total for the venue's current event (all days). Older venue
+// versions don't send it yet.
+function eventBlock(v) {
+  const e = v.eventTotals;
+  if (!e) return v.event ? '<div class="event-total muted">Event total: update venue to show</div>' : '';
+  const since = e.since ? ' since ' + new Date(e.since + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+  return `
+      <div class="event-total">
+        <span class="event-money">${money(e.revenue)}</span>
+        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · ${e.sessions || 0} session${e.sessions === 1 ? '' : 's'}</span>
+      </div>`;
 }
 
 function card(v) {
@@ -51,6 +66,8 @@ function card(v) {
         <span class="money">${money(t.revenue)}</span>
         <span class="money-label">today${t.unpaid ? ` · ${t.unpaid} unpaid` : ''}</span>
       </div>
+
+      ${eventBlock(v)}
 
       <div class="metrics">
         <div class="metric"><div class="metric-value">${t.orders || 0}</div><div class="metric-label">Orders</div></div>

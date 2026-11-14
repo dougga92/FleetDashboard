@@ -55,7 +55,11 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
 
-  const sum = (f) => venues.reduce((s, v) => s + (Number(f(v)) || 0), 0);
+  const sum = (f, list = venues) => list.reduce((s, v) => s + (Number(f(v)) || 0), 0);
+  // Running event totals come from each venue (eventTotals in the heartbeat).
+  // Demo / test-print events are left out of the combined total.
+  const isDemo = (v) => /\(DEMO\)/i.test(v.event || '');
+  const withEvent = venues.filter(v => v.eventTotals && !isDemo(v));
   res.json({
     venues,
     summary: {
@@ -66,6 +70,9 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       todayRevenue: Math.round(sum(v => v.today && v.today.revenue) * 100) / 100,
       todayOrders:  sum(v => v.today && v.today.orders),
       todaySessions: sum(v => v.today && v.today.sessions),
+      eventRevenue:  Math.round(sum(v => v.eventTotals.revenue, withEvent) * 100) / 100,
+      eventOrders:   sum(v => v.eventTotals.orders, withEvent),
+      eventVenues:   withEvent.length,
     },
     offlineAfterSec: OFFLINE_AFTER_MS / 1000,
     generatedAt: new Date().toISOString(),

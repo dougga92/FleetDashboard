@@ -100,3 +100,6 @@ body {
 
 .empty { color: var(--muted); text-align: center; padding: 48px 0; }
 .empty code { background: var(--surface); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); }
+.event-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.event-total.muted { color: var(--muted); font-size: 0.8rem; }
+.event-money { font-size: 1.3rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
