@@ -2,6 +2,12 @@
 const POLL_MS = 10000;
 
 const $ = (id) => document.getElementById(id);
+// Average per paid order: revenue only counts paid orders, so unpaid ones
+// (test prints, pay-later) are left out of the divisor. null when no paid orders.
+const avgOrder = (revenue, orders, unpaid) => {
+  const paid = (Number(orders) || 0) - (Number(unpaid) || 0);
+  return paid > 0 ? (Number(revenue) || 0) / paid : null;
+};
 const money = (n) => '$' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -13,12 +19,20 @@ function ago(sec) {
   return Math.floor(m / 60) + 'h ago';
 }
 
+function avgText(revenue, orders, unpaid, whole = false) {
+  const a = avgOrder(revenue, orders, unpaid);
+  if (a === null) return '—';
+  return whole ? '$' + Math.round(a).toLocaleString() : money(a);
+}
+
 function renderSummary(s) {
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
     { label: 'All events to date', value: money(s.eventRevenue), cls: '',
       sub: `${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}` },
+    { label: 'Avg per order', value: avgText(s.eventRevenue, s.eventOrders, s.eventUnpaid), cls: '',
+      sub: `all events · today ${avgText(s.todayRevenue, s.todayOrders, s.todayUnpaid)}` },
     { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}` },
     { label: "Today's sessions", value: s.todaySessions, cls: '', sub: 'across the fleet' },
     { label: 'Printers down', value: s.printersDown, cls: s.printersDown ? 'bad' : 'ok',
@@ -41,7 +55,7 @@ function eventBlock(v) {
   return `
       <div class="event-total">
         <span class="event-money">${money(e.revenue)}</span>
-        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · ${e.sessions || 0} session${e.sessions === 1 ? '' : 's'}</span>
+        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(e.revenue, e.orders, e.unpaid)} · ${e.sessions || 0} session${e.sessions === 1 ? '' : 's'}</span>
       </div>`;
 }
 
@@ -71,6 +85,7 @@ function card(v) {
 
       <div class="metrics">
         <div class="metric"><div class="metric-value">${t.orders || 0}</div><div class="metric-label">Orders</div></div>
+        <div class="metric"><div class="metric-value">${avgText(t.revenue, t.orders, t.unpaid, true)}</div><div class="metric-label">Avg order</div></div>
         <div class="metric"><div class="metric-value">${t.sessions || 0}</div><div class="metric-label">Sessions</div></div>
         <div class="metric"><div class="metric-value">${t.photos || 0}</div><div class="metric-label">Photos</div></div>
       </div>
