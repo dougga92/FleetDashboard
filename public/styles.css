@@ -42,15 +42,16 @@ body {
 
 /* ── Summary tiles ── */
 .summary {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 16px; margin-bottom: 28px;
 }
 .tile {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 18px 20px;
+  padding: 16px 14px;
+  container-type: inline-size; /* numbers below scale to the tile's own width */
 }
 .tile-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
-.tile-value { font-size: clamp(1.3rem, 1.75vw, 2.1rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.tile-value { font-size: clamp(1rem, 15cqi, 2.1rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .tile-value.ok   { color: var(--green); }
 .tile-value.warn { color: var(--amber); }
 .tile-value.bad  { color: var(--red); }
@@ -87,7 +88,9 @@ body {
 .money { font-size: 2rem; font-weight: 800; color: var(--green); line-height: 1; font-variant-numeric: tabular-nums; }
 .money-label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
 
-.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+/* Orders / Avg order / Photos / Emails as two rows of two: four across is too
+   cramped in a card at every common width. */
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metric { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; text-align: center; }
 .metric-value { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .metric-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 2px; }
@@ -104,4 +107,10 @@ body {
 .event-total.muted { color: var(--muted); font-size: 0.8rem; }
 .event-money { font-size: 1.3rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 
-@media (max-width: 480px) { .tile-value { font-size: 2.1rem; } }
+/* ACS daily-cap gauge */
+.meter { height: 6px; border-radius: 3px; background: var(--border); margin-top: 10px; overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 3px; background: var(--green); }
+.meter-warn { background: var(--amber); }
+.meter-bad  { background: var(--red); }
+
+

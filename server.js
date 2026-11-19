@@ -20,6 +20,10 @@ const DASH_USER   = process.env.DASHBOARD_USER || 'admin';
 const DASH_PASS   = process.env.DASHBOARD_PASSWORD || '';          // '' = board is open (dev only)
 const OFFLINE_AFTER_MS = (Number(process.env.OFFLINE_AFTER_SEC) || 150) * 1000; // stale => "offline"
 const PORT = process.env.PORT || 3000;
+// Azure Communication Services daily email send limit, for the ACS gauge.
+// The ACS default is ~100/day; 3600/day has been requested. Change it here or
+// with the ACS_DAILY_EMAIL_CAP app setting (no code change needed).
+const ACS_DAILY_EMAIL_CAP = Number(process.env.ACS_DAILY_EMAIL_CAP) > 0 ? Number(process.env.ACS_DAILY_EMAIL_CAP) : 3600;
 
 // Latest heartbeat per venue, keyed by machineId (stable per box) then venue name.
 const fleet = new Map();
@@ -60,6 +64,27 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   // Demo / test-print events are left out of the combined total.
   const isDemo = (v) => /\(DEMO\)/i.test(v.event || '');
   const withEvent = venues.filter(v => v.eventTotals && !isDemo(v));
+
+  // Emails sent today. `emails` = every send (ACS + Microsoft 365); `emailsAcs` =
+  // ACS sends only, the number that counts against the ACS daily cap. Both are
+  // one per send-API call. Stale (offline) venues and older builds that don't
+  // send the fields count as 0: a box that went quiet keeps its last "today",
+  // which may be yesterday's by now. Demo venues ARE counted, because their test
+  // sends still use the real ACS quota.
+  //
+  // APPROXIMATION: each venue reports its OWN local "today", so venues in
+  // different US time zones (ET/CT/PT) roll over at different wall-clock moments.
+  // Summing the current per-venue snapshot is a good practical gauge, but it is
+  // not a true UTC-day total (ACS meters on its own day boundary). A precise
+  // rolling-24h figure would need heartbeat history, which this in-memory
+  // dashboard doesn't keep.
+  const reporting = venues.filter(v => v.online);
+  const count = (n) => Math.max(0, Math.floor(Number(n) || 0));
+  const todayEmails    = sum(v => count(v.today && v.today.emails), reporting);
+  const todayEmailsAcs = sum(v => count(v.today && v.today.emailsAcs), reporting);
+  const acsPct = Math.round((todayEmailsAcs / ACS_DAILY_EMAIL_CAP) * 1000) / 10;
+  // normal < 70% of cap, warn 70–89%, bad >= 90%
+  const acsLevel = acsPct >= 90 ? 'bad' : acsPct >= 70 ? 'warn' : 'ok';
   res.json({
     venues,
     summary: {
@@ -72,6 +97,11 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       eventRevenue:  Math.round(sum(v => v.eventTotals.revenue, withEvent) * 100) / 100,
       eventOrders:   sum(v => v.eventTotals.orders, withEvent),
       eventVenues:   withEvent.length,
+      todayEmails,
+      todayEmailsAcs,
+      acsCap:        ACS_DAILY_EMAIL_CAP,
+      acsPct,
+      acsLevel,
     },
     offlineAfterSec: OFFLINE_AFTER_MS / 1000,
     generatedAt: new Date().toISOString(),

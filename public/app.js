@@ -27,6 +27,16 @@ function avgText(revenue, orders, whole = false) {
   return whole ? '$' + Math.round(a).toLocaleString() : money(a);
 }
 
+const num = (n) => (Number(n) || 0).toLocaleString();
+
+// Thin progress bar for the ACS gauge; level = ok | warn | bad (set by the server).
+function meter(m) {
+  const pct = Math.min(100, Math.max(0, Number(m.pct) || 0));
+  return `<div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+        <div class="meter-fill meter-${esc(m.level)}" style="width:${pct}%"></div>
+      </div>`;
+}
+
 function renderSummary(s) {
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
@@ -36,6 +46,10 @@ function renderSummary(s) {
     { label: 'Avg per order', value: avgText(s.eventRevenue, s.eventOrders), cls: '',
       sub: `all events · today ${avgText(s.todayRevenue, s.todayOrders)}` },
     { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}` },
+    { label: 'Emails sent today (fleet)', value: num(s.todayEmails), cls: '',
+      sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
+    { label: 'ACS daily cap', value: `${num(s.todayEmailsAcs)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
+      sub: `${s.acsPct}% used today`, meter: { pct: s.acsPct, level: s.acsLevel } },
     { label: 'Printers down', value: s.printersDown, cls: s.printersDown ? 'bad' : 'ok',
       sub: s.printersDown ? 'needs attention' : 'all printing' },
   ];
@@ -43,6 +57,7 @@ function renderSummary(s) {
     <div class="tile">
       <div class="tile-label">${t.label}</div>
       <div class="tile-value ${t.cls}">${esc(t.value)}</div>
+      ${t.meter ? meter(t.meter) : ''}
       <div class="tile-sub">${esc(t.sub)}</div>
     </div>`).join('');
 }
@@ -88,6 +103,7 @@ function card(v) {
         <div class="metric"><div class="metric-value">${t.orders || 0}</div><div class="metric-label">Orders</div></div>
         <div class="metric"><div class="metric-value">${avgText(t.revenue, t.orders, true)}</div><div class="metric-label">Avg order</div></div>
         <div class="metric"><div class="metric-value">${t.photos || 0}</div><div class="metric-label">Photos</div></div>
+        <div class="metric"><div class="metric-value">${num(t.emails)}</div><div class="metric-label">Emails</div></div>
       </div>
 
       <div class="card-foot">

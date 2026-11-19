@@ -5,11 +5,26 @@ server POSTs an aggregate **heartbeat** (see `telemetryService.js` in the
 EventPhotos repo); this app keeps the latest per venue and shows them live.
 
 - **No customer data** ever reaches here — heartbeats are aggregates only
-  (today's orders / revenue / sessions / photos, printer-online, current event,
+  (today's orders / revenue / sessions / photos / emails, printer-online, current event,
   venue name + machine id + version).
 - **In-memory storage** (v1): the board is *live*; venues re-report ~every 45s,
   so a restart repopulates within a minute. See *Persisting history* below to add
   Azure Table Storage later.
+
+## Emails and the ACS daily cap
+
+Heartbeats carry `today.emails` (every send, ACS + Microsoft 365) and
+`today.emailsAcs` (ACS sends only). The board shows the fleet sum of `emails`,
+each venue's `emails`, and a gauge of the fleet's `emailsAcs` against
+`ACS_DAILY_EMAIL_CAP` (app setting, default 3600): amber from 70%, red from 90%.
+Offline venues and older builds without the fields count as 0. Each venue reports
+its own local "today", so across time zones the sum approximates a UTC-day total.
+
+Change the cap without a code change:
+
+```bash
+az webapp config appsettings set -n fotomentum-fleet -g dougga_rg_6763 --settings ACS_DAILY_EMAIL_CAP=100
+```
 
 ## Endpoints
 
