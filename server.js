@@ -64,8 +64,6 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
 
-  const printerUp = (v) => (v.machines && typeof v.machines.printAgentOnline === 'boolean')
-    ? v.machines.printAgentOnline : v.printerOnline;
   const sum = (f, list = venues) => list.reduce((s, v) => s + (Number(f(v)) || 0), 0);
   // Running event totals come from each venue (eventTotals in the heartbeat).
   // Demo / test-print events are left out of the combined total.
@@ -98,8 +96,6 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       total:        venues.length,
       online:       venues.filter(v => v.online).length,
       offline:      venues.filter(v => !v.online).length,
-      // machines.printAgentOnline supersedes the legacy printerOnline flag.
-      printersDown: venues.filter(v => v.online && printerUp(v) === false).length,
       todayRevenue: Math.round(sum(v => v.today && v.today.revenue) * 100) / 100,
       todayOrders:  sum(v => v.today && v.today.orders),
       eventRevenue:  Math.round(sum(v => v.eventTotals.revenue, withEvent) * 100) / 100,

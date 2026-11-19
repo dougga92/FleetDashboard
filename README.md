@@ -33,8 +33,7 @@ Each venue card shows **S** (server: last heartbeat received within 120 s,
 and one **K** per kiosk seen in the last 5 min (`machines.kiosksRecent`): green
 for the `kiosksOnline` ones, red for kiosks that just dropped. Grey = unknown:
 no kiosks, a stale heartbeat, or an older venue build without `machines`
-(S then falls back to the legacy `printerOnline` flag). "Printers down" uses
-`machines.printAgentOnline` when present, else `printerOnline`.
+(S then falls back to the legacy `printerOnline` flag).
 
 ## Endpoints
 

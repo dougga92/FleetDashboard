@@ -50,8 +50,6 @@ function renderSummary(s) {
       sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
     { label: 'ACS daily cap', value: `${num(s.todayEmailsAcs)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
       sub: `${s.acsPct}% used today`, meter: { pct: s.acsPct, level: s.acsLevel } },
-    { label: 'Printers down', value: s.printersDown, cls: s.printersDown ? 'bad' : 'ok',
-      sub: s.printersDown ? 'needs attention' : 'all printing' },
   ];
   $('summary').innerHTML = tiles.map(t => `
     <div class="tile">
