@@ -75,11 +75,43 @@ function eventBlock(v) {
       </div>`;
 }
 
+// Per-machine status row: S (server), P (photographer station), one K per kiosk.
+// state: on (green) | off (red) | unknown (grey: older venue build, no data).
+const MAX_KIOSK_DOTS = 12;
+function dot(letter, state, title) {
+  return `<span class="mach mach-${state}" title="${esc(title)}" aria-label="${esc(title)}">${letter}<span class="mach-dot"></span></span>`;
+}
+function machinesRow(v) {
+  const m = v.machines && typeof v.machines === 'object' ? v.machines : null;
+  // S = the main box is up: heartbeat fresh (server-computed). Older builds
+  // without machines also use their legacy printerOnline flag.
+  const sUp = v.serverFresh && (m || v.printerOnline !== false);
+  const parts = [dot('S', sUp ? 'on' : 'off', sUp ? 'Server online' : (v.serverFresh ? 'Server: printer offline' : 'Server: no recent heartbeat'))];
+  if (!m) {
+    parts.push(dot('P', 'unknown', 'Photographer: update venue to show'));
+    parts.push(dot('K', 'unknown', 'Kiosks: update venue to show'));
+  } else {
+    // A stale heartbeat means we don't know the current state of the others.
+    const stale = !v.serverFresh;
+    parts.push(stale ? dot('P', 'unknown', 'Photographer: no recent heartbeat')
+      : dot('P', m.photographerOnline === true ? 'on' : 'off', m.photographerOnline === true ? 'Photographer online' : 'Photographer offline'));
+    const recent = Math.max(0, Math.floor(Number(m.kiosksRecent) || 0));
+    const online = Math.min(recent, Math.max(0, Math.floor(Number(m.kiosksOnline) || 0)));
+    if (stale || recent === 0) {
+      parts.push(dot('K', 'unknown', stale ? 'Kiosks: no recent heartbeat' : 'No kiosks online'));
+    } else {
+      const shown = Math.min(recent, MAX_KIOSK_DOTS);
+      for (let i = 0; i < shown; i++) {
+        parts.push(i < online ? dot('K', 'on', 'Kiosk online') : dot('K', 'off', 'Kiosk just dropped (seen in the last 5 min)'));
+      }
+      if (recent > shown) parts.push(`<span class="mach-more">+${recent - shown}</span>`);
+    }
+  }
+  return `<div class="machines" aria-label="Machines">${parts.join('')}</div>`;
+}
+
 function card(v) {
   const t = v.today || {};
-  const printer = v.printerOnline === false
-    ? '<span class="chip chip-bad">🖨 Printer offline</span>'
-    : '<span class="chip chip-ok">🖨 Printer OK</span>';
   return `
     <div class="card ${v.online ? 'online' : 'offline'}">
       <div class="card-head">
@@ -107,7 +139,7 @@ function card(v) {
       </div>
 
       <div class="card-foot">
-        ${printer}
+        ${machinesRow(v)}
         <span class="meta">${v.online ? 'updated ' + ago(v.ageSec) : 'last seen ' + ago(v.ageSec)}${v.version ? ' · v' + esc(v.version) : ''}</span>
       </div>
     </div>`;

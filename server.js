@@ -19,6 +19,10 @@ const INGEST_KEY  = process.env.INGEST_KEY || '';                 // shared venu
 const DASH_USER   = process.env.DASHBOARD_USER || 'admin';
 const DASH_PASS   = process.env.DASHBOARD_PASSWORD || '';          // '' = board is open (dev only)
 const OFFLINE_AFTER_MS = (Number(process.env.OFFLINE_AFTER_SEC) || 150) * 1000; // stale => "offline"
+// The "S" (server) dot on a venue card goes red once its last heartbeat is older
+// than this. Measured from when THIS dashboard received the heartbeat, not the
+// venue's own sentAt, so a venue PC with a drifting clock can't show a false red.
+const SERVER_FRESH_MS = (Number(process.env.SERVER_FRESH_SEC) || 120) * 1000;
 const PORT = process.env.PORT || 3000;
 // Azure Communication Services daily email send limit, for the ACS gauge.
 // The ACS default is ~100/day; 3600/day has been requested. Change it here or
@@ -55,10 +59,13 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const venues = [...fleet.values()]
     .map(v => {
       const ageSec = Math.round((now - v.receivedAt) / 1000);
-      return { ...v, ageSec, online: (now - v.receivedAt) < OFFLINE_AFTER_MS };
+      return { ...v, ageSec, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
+               serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS };
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
 
+  const printerUp = (v) => (v.machines && typeof v.machines.printAgentOnline === 'boolean')
+    ? v.machines.printAgentOnline : v.printerOnline;
   const sum = (f, list = venues) => list.reduce((s, v) => s + (Number(f(v)) || 0), 0);
   // Running event totals come from each venue (eventTotals in the heartbeat).
   // Demo / test-print events are left out of the combined total.
@@ -91,7 +98,8 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       total:        venues.length,
       online:       venues.filter(v => v.online).length,
       offline:      venues.filter(v => !v.online).length,
-      printersDown: venues.filter(v => v.online && v.printerOnline === false).length,
+      // machines.printAgentOnline supersedes the legacy printerOnline flag.
+      printersDown: venues.filter(v => v.online && printerUp(v) === false).length,
       todayRevenue: Math.round(sum(v => v.today && v.today.revenue) * 100) / 100,
       todayOrders:  sum(v => v.today && v.today.orders),
       eventRevenue:  Math.round(sum(v => v.eventTotals.revenue, withEvent) * 100) / 100,

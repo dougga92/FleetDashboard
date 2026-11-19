@@ -26,6 +26,16 @@ Change the cap without a code change:
 az webapp config appsettings set -n fotomentum-fleet -g dougga_rg_6763 --settings ACS_DAILY_EMAIL_CAP=100
 ```
 
+## Machine status row (S / P / K)
+
+Each venue card shows **S** (server: last heartbeat received within 120 s,
+`SERVER_FRESH_SEC`), **P** (photographer station, `machines.photographerOnline`)
+and one **K** per kiosk seen in the last 5 min (`machines.kiosksRecent`): green
+for the `kiosksOnline` ones, red for kiosks that just dropped. Grey = unknown:
+no kiosks, a stale heartbeat, or an older venue build without `machines`
+(S then falls back to the legacy `printerOnline` flag). "Printers down" uses
+`machines.printAgentOnline` when present, else `printerOnline`.
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |

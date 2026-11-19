@@ -96,9 +96,15 @@ body {
 .metric-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 2px; }
 
 .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 10px; }
-.chip { font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 8px; white-space: nowrap; }
-.chip-ok   { background: rgba(34,197,94,.13); color: var(--green); }
-.chip-bad  { background: rgba(239,68,68,.15); color: #fca5a5; }
+/* Machine status row: a letter with its status dot underneath. */
+.machines { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 4px 9px; }
+.mach { display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+        font-size: 0.74rem; font-weight: 700; line-height: 1; color: var(--text); }
+.mach-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); }
+.mach-on  .mach-dot { background: var(--green); }
+.mach-off .mach-dot { background: var(--red); }
+.mach-unknown { color: var(--muted); opacity: 0.6; }
+.mach-more { color: var(--muted); font-size: 0.74rem; align-self: center; }
 .meta { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 
 .empty { color: var(--muted); text-align: center; padding: 48px 0; }
