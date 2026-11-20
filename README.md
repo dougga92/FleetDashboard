@@ -11,19 +11,24 @@ EventPhotos repo); this app keeps the latest per venue and shows them live.
   so a restart repopulates within a minute. See *Persisting history* below to add
   Azure Table Storage later.
 
-## Emails and the ACS daily cap
+## Emails and the ACS hourly cap
 
 Heartbeats carry `today.emails` (every send, ACS + Microsoft 365) and
-`today.emailsAcs` (ACS sends only). The board shows the fleet sum of `emails`,
-each venue's `emails`, and a gauge of the fleet's `emailsAcs` against
-`ACS_DAILY_EMAIL_CAP` (app setting, default 3600): amber from 70%, red from 90%.
-Offline venues and older builds without the fields count as 0. Each venue reports
-its own local "today", so across time zones the sum approximates a UTC-day total.
+`today.emailsAcs` (ACS sends only). The board shows the fleet sum of `emails`
+today and each venue's `emails`. Offline venues and older builds without the
+fields count as 0.
+
+The ACS limit is **per hour**, so the gauge shows ACS sends across the fleet in
+the last 60 minutes against `ACS_HOURLY_EMAIL_CAP` (app setting, default 100):
+amber from 70%, red from 90%. Venues only send a running daily count, so the
+dashboard works out each hour's sends from how much `emailsAcs` rises between
+heartbeats (in memory). For the first hour after a restart it covers only the
+time since the restart, and says so.
 
 Change the cap without a code change:
 
 ```bash
-az webapp config appsettings set -n fotomentum-fleet -g dougga_rg_6763 --settings ACS_DAILY_EMAIL_CAP=100
+az webapp config appsettings set -n fotomentum-fleet -g dougga_rg_6763 --settings ACS_HOURLY_EMAIL_CAP=100
 ```
 
 ## Machine status row (S / P / K)

@@ -24,14 +24,53 @@ const OFFLINE_AFTER_MS = (Number(process.env.OFFLINE_AFTER_SEC) || 150) * 1000; 
 // venue's own sentAt, so a venue PC with a drifting clock can't show a false red.
 const SERVER_FRESH_MS = (Number(process.env.SERVER_FRESH_SEC) || 120) * 1000;
 const PORT = process.env.PORT || 3000;
-// Azure Communication Services daily email send limit, for the ACS gauge.
-// The ACS default is ~100/day; 3600/day has been requested. Change it here or
-// with the ACS_DAILY_EMAIL_CAP app setting (no code change needed).
-const ACS_DAILY_EMAIL_CAP = Number(process.env.ACS_DAILY_EMAIL_CAP) > 0 ? Number(process.env.ACS_DAILY_EMAIL_CAP) : 3600;
+// Azure Communication Services email send limit, for the ACS gauge. It is an
+// HOURLY limit (default 100 emails/hour). Change it here or with the
+// ACS_HOURLY_EMAIL_CAP app setting (no code change needed).
+const ACS_HOURLY_EMAIL_CAP = Number(process.env.ACS_HOURLY_EMAIL_CAP) > 0 ? Number(process.env.ACS_HOURLY_EMAIL_CAP) : 100;
+// ACS meters a ROLLING hour. ACS_WINDOW_SEC exists only to test the roll-off locally.
+const HOUR_MS = (Number(process.env.ACS_WINDOW_SEC) || 3600) * 1000;
+const STARTED_AT = Date.now();
 
 // Latest heartbeat per venue, keyed by machineId (stable per box) then venue name.
 const fleet = new Map();
 const venueKey = (p) => p.machineId || p.venue || 'unknown';
+
+// ── ACS sends in the last hour ───────────────────────────────────────────────
+// Venues only report a running "today" count (today.emailsAcs), but the ACS
+// limit is per hour. So we watch each venue's count rise between heartbeats and
+// keep those increments, timestamped, for an hour. A count that goes DOWN means
+// the venue's day rolled over, so the new value is all new sends. The first
+// heartbeat after a dashboard restart only sets the baseline, so for the first
+// hour after a restart the gauge covers just the time since the restart.
+// ACS counts a rolling hour, and so does this: each send drops off 60 minutes
+// after it was seen, so the number falls as time passes. Approximation: sends
+// are stamped when the heartbeat arrives (up to ~45 s after the actual send).
+const acsSends = new Map(); // venueKey -> { last, events: [{ t, n }] }
+const countOf = (n) => Math.max(0, Math.floor(Number(n) || 0));
+
+function trackAcsSends(key, p) {
+  const raw = p.today && p.today.emailsAcs;
+  if (raw == null || !Number.isFinite(Number(raw))) return; // older build: nothing to track
+  const now = Date.now();
+  const cur = countOf(raw);
+  const rec = acsSends.get(key) || { last: null, events: [] };
+  if (rec.last !== null) {
+    const inc = cur >= rec.last ? cur - rec.last : cur;
+    if (inc > 0) rec.events.push({ t: now, n: inc });
+  }
+  rec.last = cur;
+  rec.events = rec.events.filter(e => now - e.t < HOUR_MS);
+  acsSends.set(key, rec);
+}
+
+function acsLastHour(now) {
+  let total = 0;
+  for (const rec of acsSends.values()) {
+    for (const e of rec.events) if (now - e.t < HOUR_MS) total += e.n;
+  }
+  return total;
+}
 
 // ── Ingest: venues POST here ─────────────────────────────────────────────────
 app.post('/api/heartbeat', (req, res) => {
@@ -41,6 +80,7 @@ app.post('/api/heartbeat', (req, res) => {
   const p = req.body || {};
   if (!p.machineId && !p.venue) return res.status(400).json({ error: 'missing venue identity' });
   fleet.set(venueKey(p), { ...p, receivedAt: Date.now() });
+  trackAcsSends(venueKey(p), p);
   res.json({ ok: true });
 });
 
@@ -71,25 +111,22 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const withEvent = venues.filter(v => v.eventTotals && !isDemo(v));
 
   // Emails sent today. `emails` = every send (ACS + Microsoft 365); `emailsAcs` =
-  // ACS sends only, the number that counts against the ACS daily cap. Both are
-  // one per send-API call. Stale (offline) venues and older builds that don't
-  // send the fields count as 0: a box that went quiet keeps its last "today",
-  // which may be yesterday's by now. Demo venues ARE counted, because their test
-  // sends still use the real ACS quota.
-  //
-  // APPROXIMATION: each venue reports its OWN local "today", so venues in
-  // different US time zones (ET/CT/PT) roll over at different wall-clock moments.
-  // Summing the current per-venue snapshot is a good practical gauge, but it is
-  // not a true UTC-day total (ACS meters on its own day boundary). A precise
-  // rolling-24h figure would need heartbeat history, which this in-memory
-  // dashboard doesn't keep.
+  // ACS sends only. Both are one per send-API call. Stale (offline) venues and
+  // older builds that don't send the fields count as 0: a box that went quiet
+  // keeps its last "today", which may be yesterday's by now. Each venue reports
+  // its OWN local "today", so across US time zones the sum is an approximation.
   const reporting = venues.filter(v => v.online);
-  const count = (n) => Math.max(0, Math.floor(Number(n) || 0));
-  const todayEmails    = sum(v => count(v.today && v.today.emails), reporting);
-  const todayEmailsAcs = sum(v => count(v.today && v.today.emailsAcs), reporting);
-  const acsPct = Math.round((todayEmailsAcs / ACS_DAILY_EMAIL_CAP) * 1000) / 10;
+  const todayEmails    = sum(v => countOf(v.today && v.today.emails), reporting);
+  const todayEmailsAcs = sum(v => countOf(v.today && v.today.emailsAcs), reporting);
+
+  // ACS hourly gauge: ACS sends across the whole fleet in the last 60 minutes
+  // (demo venues included: their test sends use the real quota).
+  const acsHour = acsLastHour(now);
+  const acsPct = Math.round((acsHour / ACS_HOURLY_EMAIL_CAP) * 1000) / 10;
   // normal < 70% of cap, warn 70–89%, bad >= 90%
   const acsLevel = acsPct >= 90 ? 'bad' : acsPct >= 70 ? 'warn' : 'ok';
+  // Less than an hour since a restart: the window only goes back to the restart.
+  const acsSince = now - STARTED_AT < HOUR_MS ? new Date(STARTED_AT).toISOString() : null;
   res.json({
     venues,
     summary: {
@@ -103,7 +140,9 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       eventVenues:   withEvent.length,
       todayEmails,
       todayEmailsAcs,
-      acsCap:        ACS_DAILY_EMAIL_CAP,
+      acsHour,
+      acsCap:        ACS_HOURLY_EMAIL_CAP,
+      acsSince,
       acsPct,
       acsLevel,
     },

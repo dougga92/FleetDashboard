@@ -48,8 +48,11 @@ function renderSummary(s) {
     { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}` },
     { label: 'Emails sent today (fleet)', value: num(s.todayEmails), cls: '',
       sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
-    { label: 'ACS daily cap', value: `${num(s.todayEmailsAcs)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
-      sub: `${s.acsPct}% used today`, meter: { pct: s.acsPct, level: s.acsLevel } },
+    { label: 'ACS hourly cap', value: `${num(s.acsHour)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
+      sub: `${s.acsPct}% · ` + (s.acsSince
+        ? 'since ' + new Date(s.acsSince).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' (restart)'
+        : 'last 60 min'),
+      meter: { pct: s.acsPct, level: s.acsLevel } },
   ];
   $('summary').innerHTML = tiles.map(t => `
     <div class="tile">
