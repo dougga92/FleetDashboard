@@ -172,6 +172,6 @@ body {
 .card-foot > .meta { justify-self: center; text-align: center; }
 .card-foot > .ver { justify-self: end; }
 .ver { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
-.ver-ok { color: var(--muted); font-weight: 600; padding-left: 0; padding-right: 0; }
+.ver-ok { color: #052e16; background: var(--green); }
 .ver-old { color: #1c1404; background: var(--amber); }
 .ver-unknown { color: var(--muted); border: 1px dashed var(--border-strong); }

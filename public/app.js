@@ -187,7 +187,7 @@ function versionTag(ver) {
   if (latestVersion && cmpVersion(ver, latestVersion) < 0) {
     return `<span class="ver ver-old" title="Behind: latest is v${esc(latestVersion)}">v${esc(ver)}</span>`;
   }
-  return `<span class="ver ver-ok" title="Latest version">v${esc(ver)} ✓</span>`;
+  return `<span class="ver ver-ok" title="Latest version">v${esc(ver)}</span>`;
 }
 
 const keyOf = (v) => String(v.machineId || v.venue || 'unknown');
