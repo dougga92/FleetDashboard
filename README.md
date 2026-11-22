@@ -135,3 +135,10 @@ v1 keeps only the latest heartbeat in memory. To keep history / survive restarts
 replace the `fleet` Map in `server.js` with **Azure Table Storage**
 (`@azure/data-tables`): upsert each heartbeat keyed by `machineId`, and have
 `/api/fleet` read the latest rows. The payload and board need no changes.
+
+## Sale sound
+
+Each viewer turns sound on with the **Sound** button (saved per browser; after a
+reload, tap anywhere once so the browser allows audio). New sales play one sound
+per refresh. The built-in sound is a two-note chime; to use your own, add
+`public/sale-sound.mp3` and redeploy.

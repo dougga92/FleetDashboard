@@ -270,6 +270,7 @@ function detectSales(venues) {
     next.set(keyOf(v), cur);
     const old = prevCounts && prevCounts.get(keyOf(v));
     if (old && cur.orders > old.orders) {   // a drop = new day, not a sale
+      saleSound();
       pulses.set(keyOf(v), { orders: cur.orders - old.orders, revenue: Math.round((cur.revenue - old.revenue) * 100) / 100, until: now + PULSE_MS });
     }
   }
@@ -349,6 +350,59 @@ $('grid').addEventListener('pointerdown', (e) => {
   handle.addEventListener('pointercancel', up);
 });
 
+// ── Sale sound (per browser; browsers only allow sound after a click) ──
+// Uses public/sale-sound.mp3 if that file exists, else a built-in two-note chime.
+const SOUND_KEY = 'fleet.sound';
+let soundOn = store.get(SOUND_KEY, false);
+let audioCtx = null, customSound = null, lastSoundAt = 0;
+function loadCustomSound() {
+  fetch('/api/sale-sound').then(r => r.json()).then(j => {
+    if (j && j.custom) { customSound = new Audio('/assets/sale-sound.mp3'); customSound.preload = 'auto'; }
+  }).catch(() => {});
+}
+function chime() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const t0 = audioCtx.currentTime;
+  [[1318.5, 0], [1760, 0.12]].forEach(([freq, at]) => {   // E6 then A6: "cha-ching"
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t0 + at);
+    g.gain.exponentialRampToValueAtTime(0.35, t0 + at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.6);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t0 + at); o.stop(t0 + at + 0.65);
+  });
+}
+function playSound() {
+  if (customSound) { customSound.currentTime = 0; customSound.play().catch(chime); }
+  else chime();
+}
+// Several venues selling in one poll = one sound, not a pile-up.
+function saleSound() {
+  if (!soundOn || Date.now() - lastSoundAt < 1500) return;
+  lastSoundAt = Date.now();
+  try { playSound(); } catch { /* no audio support */ }
+}
+function renderSoundBtn() {
+  const b = $('sound-btn');
+  b.setAttribute('aria-pressed', String(soundOn));
+  b.textContent = soundOn ? '🔔 Sound on' : '🔕 Sound off';
+}
+$('sound-btn').addEventListener('click', () => {
+  soundOn = !soundOn;
+  store.set(SOUND_KEY, soundOn);
+  renderSoundBtn();
+  if (soundOn) playSound();   // the click unlocks audio and previews the sound
+});
+// A saved "on" still needs one tap after a reload before the browser plays sound.
+document.addEventListener('pointerdown', () => {
+  if (soundOn && !audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: false, passive: true });
+
+loadCustomSound();
+renderSoundBtn();
 renderSortBar();
 tick();
 setInterval(tick, POLL_MS);

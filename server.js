@@ -8,6 +8,7 @@
 // To persist history, swap `fleet` for Azure Table Storage (see README).
 
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 
 const app = express();
@@ -153,6 +154,10 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
 
 // ── Static board ─────────────────────────────────────────────────────────────
 app.get('/', dashAuth, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// Optional custom sale sound: drop public/sale-sound.mp3 in to replace the built-in chime.
+app.get('/api/sale-sound', dashAuth, (_req, res) => {
+  res.json({ custom: fs.existsSync(path.join(__dirname, 'public', 'sale-sound.mp3')) });
+});
 app.use('/assets', express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req, res) => res.json({ ok: true, venues: fleet.size }));
 
