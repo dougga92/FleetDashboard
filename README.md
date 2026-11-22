@@ -140,5 +140,12 @@ replace the `fleet` Map in `server.js` with **Azure Table Storage**
 
 Each viewer turns sound on with the **Sound** button (saved per browser; after a
 reload, tap anywhere once so the browser allows audio). New sales play one sound
-per refresh. The built-in sound is a two-note chime; to use your own, add
-`public/sale-sound.mp3` and redeploy.
+per refresh. The sound is `sounds/sale-sound.mp3` (Epidemic Sound "Shout Woo Whoo", Doug's
+licence), served behind the board password; without it the board plays a
+built-in two-note chime. `sounds/` is gitignored (licensed audio, public repo),
+so deploy with the file added to the zip:
+
+```bash
+git archive -o fleet.zip HEAD && zip -q fleet.zip sounds/sale-sound.mp3
+az webapp deploy -n fotomentum-fleet -g dougga_rg_6763 --src-path fleet.zip --type zip
+```

@@ -351,13 +351,13 @@ $('grid').addEventListener('pointerdown', (e) => {
 });
 
 // ── Sale sound (per browser; browsers only allow sound after a click) ──
-// Uses public/sale-sound.mp3 if that file exists, else a built-in two-note chime.
+// Uses the custom sound (sounds/sale-sound.mp3 on the server) if present, else a built-in two-note chime.
 const SOUND_KEY = 'fleet.sound';
 let soundOn = store.get(SOUND_KEY, false);
 let audioCtx = null, customSound = null, lastSoundAt = 0;
 function loadCustomSound() {
   fetch('/api/sale-sound').then(r => r.json()).then(j => {
-    if (j && j.custom) { customSound = new Audio('/assets/sale-sound.mp3'); customSound.preload = 'auto'; }
+    if (j && j.custom) { customSound = new Audio('/api/sale-sound.mp3'); customSound.preload = 'auto'; }
   }).catch(() => {});
 }
 function chime() {

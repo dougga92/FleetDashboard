@@ -154,9 +154,16 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
 
 // ── Static board ─────────────────────────────────────────────────────────────
 app.get('/', dashAuth, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-// Optional custom sale sound: drop public/sale-sound.mp3 in to replace the built-in chime.
+// Optional custom sale sound: sounds/sale-sound.mp3 replaces the built-in chime.
+// Licensed audio, so it's gitignored (public repo), deployed with the zip, and
+// only served behind the board password.
+const SALE_SOUND = path.join(__dirname, 'sounds', 'sale-sound.mp3');
 app.get('/api/sale-sound', dashAuth, (_req, res) => {
-  res.json({ custom: fs.existsSync(path.join(__dirname, 'public', 'sale-sound.mp3')) });
+  res.json({ custom: fs.existsSync(SALE_SOUND) });
+});
+app.get('/api/sale-sound.mp3', dashAuth, (_req, res) => {
+  if (!fs.existsSync(SALE_SOUND)) return res.status(404).end();
+  res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').sendFile(SALE_SOUND);
 });
 app.use('/assets', express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req, res) => res.json({ ok: true, venues: fleet.size }));

@@ -2,3 +2,6 @@ node_modules/
 .env
 *.log
 .DS_Store
+
+# Licensed audio (Epidemic Sound): deployed, never committed (public repo)
+sounds/
