@@ -244,6 +244,7 @@ async function tick() {
     latestVersion = data.venues.map(v => v.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
     detectSales(data.venues);
     if (!dragging) renderGrid();
+    renderCharts(data.venues);
     $('empty').hidden = data.venues.length > 0;
     const when = new Date(data.generatedAt).toLocaleTimeString();
     $('updated').textContent = 'updated ' + when;
@@ -425,6 +426,68 @@ document.addEventListener('pointerdown', () => {
 
 loadCustomSound();
 renderSoundBtn();
+// ── Compare venues: ranked horizontal bars, one measure per chart ──
+// One hue for every bar (one series per chart; colour never encodes rank).
+// Values are labelled at the bar end; hover/tap a row for the full detail.
+const shortName = (v) => String(v.venue || 'Unknown').split(' - ')[0].trim();
+const evAvg = (v) => { const e = v.eventTotals; return e && Number(e.orders) > 0 ? Number(e.revenue) / Number(e.orders) : null; };
+const CHARTS = [
+  { title: "Today's revenue", val: v => rev(v), fmt: n => money(n).replace(/\.00$/, '') },
+  { title: 'Orders today', val: v => Number(v.today && v.today.orders) || 0, fmt: n => num(n) },
+  { title: 'Photo → sale today', val: v => { const t = v.today || {}; return Number(t.photos) > 0 ? (Number(t.orders) || 0) / Number(t.photos) * 100 : null; }, fmt: n => n.toFixed(1) + '%' },
+  { title: 'This event revenue', val: v => v.eventTotals ? Number(v.eventTotals.revenue) || 0 : null, fmt: n => money(n).replace(/\.00$/, '') },
+  { title: 'Avg order, this event', val: evAvg, fmt: n => money(n) },
+];
+function tipFor(v) {
+  const t = v.today || {}, e = v.eventTotals;
+  return [
+    esc(v.venue || 'Unknown venue') + (v.online ? '' : ' (offline)'),
+    `Today: ${money(t.revenue)} · ${num(t.orders)} orders · ${saleRate(t.orders, t.photos)} photo→sale`,
+    e ? `This event: ${money(e.revenue)} · ${num(e.orders)} orders · avg ${avgText(e.revenue, e.orders)}` : 'This event: not reported',
+  ].join('<br>');
+}
+function renderCharts(venues) {
+  const box = $('charts');
+  if (!box || !$('compare').open) return;            // skip the work while collapsed
+  box.innerHTML = CHARTS.map(c => {
+    const rows = venues.map(v => ({ v, n: c.val(v) }))
+      .sort((a, b) => (b.n ?? -1) - (a.n ?? -1) || byName(a.v, b.v));
+    const max = Math.max(0, ...rows.map(r => r.n || 0));
+    return `
+      <figure class="chart">
+        <figcaption>${esc(c.title)}</figcaption>
+        <ol class="bars">${rows.map(r => `
+          <li class="bar-row${r.v.online ? '' : ' bar-off'}" tabindex="0" data-tip="${esc(tipFor(r.v))}">
+            <span class="bar-name">${esc(shortName(r.v))}</span>
+            <span class="bar-track"><span class="bar" style="width:${max > 0 && r.n > 0 ? Math.max(1.5, (r.n / max) * 100) : 0}%"></span></span>
+            <span class="bar-val">${r.n == null ? '—' : esc(c.fmt(r.n))}</span>
+          </li>`).join('')}
+        </ol>
+      </figure>`;
+  }).join('');
+}
+// Remember open/closed per browser; draw as soon as it opens.
+$('compare').open = store.get('fleet.compare', window.innerWidth >= 700);   // phones start collapsed
+$('compare').addEventListener('toggle', () => {
+  store.set('fleet.compare', $('compare').open);
+  if ($('compare').open) renderCharts(lastVenues);
+});
+// Tooltip: hover (mouse), focus (keyboard) or tap (touch).
+function showTip(row) {
+  const tip = $('chart-tip');
+  tip.innerHTML = row.dataset.tip;
+  tip.hidden = false;
+  const r = row.getBoundingClientRect(), w = tip.offsetWidth;
+  tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + 12)) + window.scrollX + 'px';
+  tip.style.top = r.bottom + 6 + window.scrollY + 'px';
+}
+const hideTip = () => { $('chart-tip').hidden = true; };
+$('charts').addEventListener('pointerover', (e) => { const row = e.target.closest('.bar-row'); if (row) showTip(row); });
+$('charts').addEventListener('pointerleave', hideTip);
+$('charts').addEventListener('focusin', (e) => { const row = e.target.closest('.bar-row'); if (row) showTip(row); });
+$('charts').addEventListener('focusout', hideTip);
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.bar-row')) hideTip(); });
+
 renderSortBar();
 tick();
 setInterval(tick, POLL_MS);

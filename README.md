@@ -155,3 +155,12 @@ az webapp deploy -n fotomentum-fleet -g dougga_rg_6763 --src-path fleet.zip --ty
 The board shows its own version next to "Fleet" (from `package.json`, sent as
 `dashboardVersion` in `/api/fleet`). Bump `version` in `package.json` with each
 release and tag it (`git tag vX.Y.Z`).
+
+## Compare venues
+
+A collapsible "Compare venues" section above the cards: ranked horizontal bars
+(one hue, `#3987e5`, validated on the card surface) for today's revenue, orders
+today, photo → sale today, this event revenue and avg order this event. Hover,
+focus or tap a row for the venue's detail. Open/closed is saved per browser
+(phones start collapsed). The board keeps no history, so there are no
+over-time line charts yet.
