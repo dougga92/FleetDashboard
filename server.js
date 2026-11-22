@@ -10,6 +10,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const APP_VERSION = require('./package.json').version;   // the board's own version (bump in package.json)
 
 const app = express();
 app.set('trust proxy', true);
@@ -149,6 +150,7 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     },
     offlineAfterSec: OFFLINE_AFTER_MS / 1000,
     generatedAt: new Date().toISOString(),
+    dashboardVersion: APP_VERSION,
   });
 });
 

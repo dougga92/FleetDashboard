@@ -239,6 +239,7 @@ async function tick() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     renderSummary(data.summary);
+    if (data.dashboardVersion) $('app-ver').textContent = 'v' + data.dashboardVersion;
     lastVenues = data.venues;
     latestVersion = data.venues.map(v => v.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
     detectSales(data.venues);

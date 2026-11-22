@@ -149,3 +149,9 @@ so deploy with the file added to the zip:
 git archive -o fleet.zip HEAD && zip -q fleet.zip sounds/sale-sound.mp3
 az webapp deploy -n fotomentum-fleet -g dougga_rg_6763 --src-path fleet.zip --type zip
 ```
+
+## Version
+
+The board shows its own version next to "Fleet" (from `package.json`, sent as
+`dashboardVersion` in `/api/fleet`). Bump `version` in `package.json` with each
+release and tag it (`git tag vX.Y.Z`).
