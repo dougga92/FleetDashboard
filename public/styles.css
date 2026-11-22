@@ -93,6 +93,7 @@ body {
 .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metric { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; text-align: center; }
 .metric-value { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.metric-wide { grid-column: 1 / -1; }
 .metric-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 2px; }
 
 .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 10px; }

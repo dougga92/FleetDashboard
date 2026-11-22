@@ -29,6 +29,14 @@ function avgText(revenue, orders, whole = false) {
 
 const num = (n) => (Number(n) || 0).toLocaleString();
 
+// AJ's photo-to-sale ratio: orders ÷ photos taken, as a percent ("—" with no photos).
+function saleRate(orders, photos) {
+  const o = Number(orders) || 0, p = Number(photos) || 0;
+  if (p <= 0) return '—';
+  const pct = (o / p) * 100;
+  return pct.toFixed(1) + '%';
+}
+
 // Thin progress bar for the ACS gauge; level = ok | warn | bad (set by the server).
 function meter(m) {
   const pct = Math.min(100, Math.max(0, Number(m.pct) || 0));
@@ -72,7 +80,7 @@ function eventBlock(v) {
   return `
       <div class="event-total">
         <span class="event-money">${money(e.revenue)}</span>
-        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(e.revenue, e.orders)}</span>
+        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(e.revenue, e.orders)} · ${saleRate(e.orders, e.photos)} photo→sale</span>
       </div>`;
 }
 
@@ -137,6 +145,7 @@ function card(v) {
         <div class="metric"><div class="metric-value">${avgText(t.revenue, t.orders, true)}</div><div class="metric-label">Avg order</div></div>
         <div class="metric"><div class="metric-value">${t.photos || 0}</div><div class="metric-label">Photos</div></div>
         <div class="metric"><div class="metric-value">${num(t.emails)}</div><div class="metric-label">Emails</div></div>
+        <div class="metric metric-wide"><div class="metric-value">${saleRate(t.orders, t.photos)}</div><div class="metric-label">Photo → sale (orders ÷ photos)</div></div>
       </div>
 
       <div class="card-foot">
