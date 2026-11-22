@@ -84,6 +84,58 @@ function eventBlock(v) {
       </div>`;
 }
 
+// "What's selling": product mix a venue sends as today.sales / eventTotals.sales
+// (EventPhotos build with sales mix). Shape:
+//   { orders: { package, cart, packageWithExtras },
+//     packages: [{ name, orders, revenue }],        // package price × orders
+//     prints:   [{ size, qty, revenue }],           // à la carte print lines
+//     digitals: { qty, revenue }, bundles: { qty, revenue },
+//     addons:   { qty, revenue } }                  // lines sold below full price
+// Every part is optional; nothing renders for builds that don't send it.
+const MAX_MIX_ROWS = 4;
+function mixList(rows, nameOf) {
+  const list = (Array.isArray(rows) ? rows : []).filter(r => r && Number(r.qty ?? r.orders) > 0)
+    .sort((a, b) => (Number(b.qty ?? b.orders) || 0) - (Number(a.qty ?? a.orders) || 0));
+  const shown = list.slice(0, MAX_MIX_ROWS).map(r => `${esc(nameOf(r))} ×${num(r.qty ?? r.orders)}`);
+  if (list.length > MAX_MIX_ROWS) shown.push(`+${list.length - MAX_MIX_ROWS} more`);
+  return shown.join(' · ');
+}
+function salesMix(s) {
+  if (!s || typeof s !== 'object') return '';
+  const o = s.orders || {};
+  const pkg = Number(o.package) || 0, cart = Number(o.cart) || 0, total = pkg + cart;
+  const rows = [];
+  if (total > 0) {
+    const pct = Math.round((pkg / total) * 100);
+    rows.push(`<div class="mix-split" title="${pkg} package orders, ${cart} à la carte">
+          <div class="mix-bar"><span class="mix-pkg" style="width:${pct}%"></span></div>
+          <div class="mix-legend"><span><i class="sw sw-pkg"></i>Packages ${pkg} (${pct}%)</span><span><i class="sw sw-cart"></i>À la carte ${cart} (${100 - pct}%)</span></div>
+        </div>`);
+  }
+  const line = (label, text) => text ? `<div class="mix-row"><span class="mix-k">${label}</span><span class="mix-v">${text}</span></div>` : '';
+  rows.push(line('Packages', mixList(s.packages, r => r.name || 'Package')));
+  rows.push(line('Prints', mixList(s.prints, r => r.size || 'Print')));
+  const qr = (x) => x && Number(x.qty) > 0 ? `×${num(x.qty)} · ${money(x.revenue)}` : '';
+  rows.push(line('Digitals', qr(s.digitals)));
+  rows.push(line('Bundles', qr(s.bundles)));
+  const ext = Number(o.packageWithExtras) || 0;
+  const addon = qr(s.addons);
+  rows.push(line('Add-ons', addon ? addon + (ext ? ` · on ${ext} package order${ext === 1 ? '' : 's'}` : '') : ''));
+  const body = rows.filter(Boolean).join('');
+  return body;
+}
+function salesBlock(v) {
+  const today = salesMix(v.today && v.today.sales);
+  const ev = salesMix(v.eventTotals && v.eventTotals.sales);
+  if (!today && !ev) return '';
+  return `
+      <div class="mix">
+        <div class="mix-title">What's selling today</div>
+        ${today || '<div class="mix-row muted">No sales yet today</div>'}
+        ${ev ? `<details class="mix-event"><summary>This event</summary>${ev}</details>` : ''}
+      </div>`;
+}
+
 // Per-machine status row: S (server), P (photographer station), one K per kiosk.
 // state: on (green) | off (red) | unknown (grey: older venue build, no data).
 const MAX_KIOSK_DOTS = 12;
@@ -147,6 +199,8 @@ function card(v) {
         <div class="metric"><div class="metric-value">${num(t.emails)}</div><div class="metric-label">Emails</div></div>
         <div class="metric metric-wide"><div class="metric-value">${saleRate(t.orders, t.photos)}</div><div class="metric-label">Photo → sale (orders ÷ photos)</div></div>
       </div>
+
+      ${salesBlock(v)}
 
       <div class="card-foot">
         ${machinesRow(v)}

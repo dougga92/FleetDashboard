@@ -40,6 +40,31 @@ for the `kiosksOnline` ones, red for kiosks that just dropped. Grey = unknown:
 no kiosks, a stale heartbeat, or an older venue build without `machines`
 (S then falls back to the legacy `printerOnline` flag).
 
+## Photo → sale and What's selling
+
+**Photo → sale** = orders ÷ photos taken (today on the card, whole event on the
+event line).
+
+**What's selling** shows the product mix when a venue sends `today.sales` and/or
+`eventTotals.sales` (non-voided orders only; every part optional):
+
+```json
+{
+  "orders":   { "package": 14, "cart": 9, "packageWithExtras": 5 },
+  "packages": [{ "name": "Santa Deluxe", "orders": 8, "revenue": 440 }],
+  "prints":   [{ "size": "5x7", "qty": 12, "revenue": 180 }],
+  "digitals": { "qty": 9, "revenue": 135 },
+  "bundles":  { "qty": 0, "revenue": 0 },
+  "addons":   { "qty": 7, "revenue": 63 }
+}
+```
+
+`package` = orders with a package, `cart` = à la carte only, `packageWithExtras`
+= package orders that also bought something extra. `prints` / `digitals` /
+`bundles` count à la carte lines only (not package slots). `addons` = lines
+sold below the product's full price (add-on / upsell copies). Venues without
+it show nothing.
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |

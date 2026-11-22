@@ -121,3 +121,18 @@ body {
 .meter-bad  { background: var(--red); }
 
 
+
+/* What's selling (product mix) */
+.mix { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.82rem; }
+.mix-title, .mix-event summary { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
+.mix-event { margin-top: 8px; }
+.mix-event summary { cursor: pointer; margin-bottom: 6px; }
+.mix-bar { height: 8px; border-radius: 4px; background: #64748b; overflow: hidden; }
+.mix-pkg { display: block; height: 100%; background: var(--green); }
+.mix-legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; margin: 4px 0 6px; color: var(--muted); }
+.sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+.sw-pkg { background: var(--green); } .sw-cart { background: #64748b; }
+.mix-row { display: flex; gap: 8px; padding: 2px 0; }
+.mix-k { flex: 0 0 64px; color: var(--muted); }
+.mix-v { flex: 1; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mix-row.muted { color: var(--muted); }
