@@ -136,3 +136,28 @@ body {
 .mix-k { flex: 0 0 64px; color: var(--muted); }
 .mix-v { flex: 1; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .mix-row.muted { color: var(--muted); }
+
+/* Sort bar (per-browser) */
+.sortbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 14px; }
+.sort-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+.sortbar button { background: var(--surface); color: var(--text, #e2e8f0); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.85rem; cursor: pointer; }
+.sortbar button[aria-pressed="true"] { background: rgba(34,197,94,.16); border-color: rgba(34,197,94,.5); color: var(--green); }
+.sort-hint { color: var(--muted); font-size: 0.8rem; flex-basis: 100%; }
+
+/* Drag handle: only in Drag to order mode */
+.card-head { position: relative; }
+.drag-handle { display: none; cursor: grab; touch-action: none; user-select: none; color: var(--muted); font-size: 1.2rem; line-height: 1; padding: 4px 8px 4px 0; }
+.custom-sort .drag-handle { display: inline-block; }
+.card-title { flex: 1; min-width: 0; }
+.card.dragging { opacity: 0.85; outline: 2px dashed var(--green); cursor: grabbing; }
+
+/* Sale pulse */
+.card { position: relative; }
+.card.sale-pulse { animation: sale-pulse 1.4s ease-out 3; }
+@keyframes sale-pulse {
+  0%   { box-shadow: inset 4px 0 0 var(--green), 0 0 0 0 rgba(34,197,94,.75); }
+  100% { box-shadow: inset 4px 0 0 var(--green), 0 0 0 18px rgba(34,197,94,0); }
+}
+.sale-pop { position: absolute; top: -12px; right: 14px; z-index: 2; background: var(--green); color: #052e16; font-weight: 800; font-size: 0.8rem; padding: 3px 10px; border-radius: 999px; animation: sale-pop 6s ease-out forwards; pointer-events: none; }
+@keyframes sale-pop { 0% { transform: translateY(6px) scale(.8); opacity: 0; } 8% { transform: none; opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .card.sale-pulse, .sale-pop { animation: none; } }

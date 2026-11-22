@@ -21,6 +21,14 @@
 
   <main class="wrap">
     <section class="summary" id="summary" aria-label="Fleet summary"></section>
+    <div class="sortbar" id="sortbar" role="group" aria-label="Sort venues">
+      <span class="sort-label">Sort</span>
+      <button type="button" data-sort="name">Name</button>
+      <button type="button" data-sort="high">Highest $</button>
+      <button type="button" data-sort="low">Lowest $</button>
+      <button type="button" data-sort="custom">Drag to order</button>
+      <span class="sort-hint" id="sort-hint" hidden>Drag a card by ⠿ · saved on this device only</span>
+    </div>
     <section class="grid" id="grid" aria-label="Venues"></section>
     <p class="empty" id="empty" hidden>No venues have reported yet. Once a venue's <code>TELEMETRY_URL</code> points here, it appears within a minute.</p>
   </main>

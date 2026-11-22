@@ -171,12 +171,16 @@ function machinesRow(v) {
   return `<div class="machines" aria-label="Machines">${parts.join('')}</div>`;
 }
 
-function card(v) {
+const keyOf = (v) => String(v.machineId || v.venue || 'unknown');
+
+function card(v, sale) {
   const t = v.today || {};
   return `
-    <div class="card ${v.online ? 'online' : 'offline'}">
+    <div class="card ${v.online ? 'online' : 'offline'}${sale ? ' sale-pulse' : ''}" data-key="${esc(keyOf(v))}">
+      ${sale ? `<span class="sale-pop" aria-live="polite">+${sale.orders} sale${sale.orders === 1 ? '' : 's'}${sale.revenue > 0 ? ' · ' + money(sale.revenue) : ''}</span>` : ''}
       <div class="card-head">
-        <div>
+        <span class="drag-handle" title="Drag to reorder" aria-label="Drag to reorder">⠿</span>
+        <div class="card-title">
           <div class="venue-name">${esc(v.venue || 'Unknown venue')}</div>
           ${v.event ? `<div class="venue-event">${esc(v.event)}</div>` : ''}
         </div>
@@ -215,7 +219,9 @@ async function tick() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     renderSummary(data.summary);
-    $('grid').innerHTML = data.venues.map(card).join('');
+    lastVenues = data.venues;
+    detectSales(data.venues);
+    if (!dragging) renderGrid();
     $('empty').hidden = data.venues.length > 0;
     const when = new Date(data.generatedAt).toLocaleTimeString();
     $('updated').textContent = 'updated ' + when;
@@ -226,5 +232,123 @@ async function tick() {
   }
 }
 
+// ── Sorting (saved in THIS browser only, so each viewer sorts independently) ──
+const SORT_KEY = 'fleet.sort', ORDER_KEY = 'fleet.order';
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode: keep in memory */ } },
+};
+let sortMode = store.get(SORT_KEY, 'name');
+let customOrder = store.get(ORDER_KEY, []);
+let lastVenues = [];
+let dragging = null;
+
+const rev = (v) => Number(v.today && v.today.revenue) || 0;
+const byName = (a, b) => String(a.venue || '').localeCompare(String(b.venue || ''), undefined, { sensitivity: 'base' });
+function sorted(venues) {
+  const list = venues.slice();
+  if (sortMode === 'high') return list.sort((a, b) => rev(b) - rev(a) || byName(a, b));
+  if (sortMode === 'low')  return list.sort((a, b) => rev(a) - rev(b) || byName(a, b));
+  if (sortMode === 'custom') {
+    // Venues not placed yet (new ones) go at the end, by name.
+    const pos = new Map(customOrder.map((k, i) => [k, i]));
+    return list.sort((a, b) => (pos.has(keyOf(a)) ? pos.get(keyOf(a)) : 1e9) - (pos.has(keyOf(b)) ? pos.get(keyOf(b)) : 1e9) || byName(a, b));
+  }
+  return list.sort(byName);
+}
+
+// ── Sale pulse: a card flashes when its order count goes up between polls ──
+const PULSE_MS = 6000;
+let prevCounts = null;           // key -> { orders, revenue }; null until the first poll
+const pulses = new Map();        // key -> { orders, revenue, until }
+function detectSales(venues) {
+  const now = Date.now();
+  const next = new Map();
+  for (const v of venues) {
+    const t = v.today || {};
+    const cur = { orders: Number(t.orders) || 0, revenue: Number(t.revenue) || 0 };
+    next.set(keyOf(v), cur);
+    const old = prevCounts && prevCounts.get(keyOf(v));
+    if (old && cur.orders > old.orders) {   // a drop = new day, not a sale
+      pulses.set(keyOf(v), { orders: cur.orders - old.orders, revenue: Math.round((cur.revenue - old.revenue) * 100) / 100, until: now + PULSE_MS });
+    }
+  }
+  prevCounts = next;
+  for (const [k, p] of pulses) if (p.until <= now) pulses.delete(k);
+}
+
+function renderGrid() {
+  const grid = $('grid');
+  // Keep "This event" panels open across refreshes.
+  const open = new Set([...grid.querySelectorAll('.card')].filter(c => c.querySelector('.mix-event[open]')).map(c => c.dataset.key));
+  grid.innerHTML = sorted(lastVenues).map(v => {
+    const p = pulses.get(keyOf(v));
+    return card(v, p || null);   // pulses expire (6 s) before the next poll (10 s), so each shows once
+  }).join('');
+  for (const k of open) {
+    const d = grid.querySelector(`.card[data-key="${CSS.escape(k)}"] .mix-event`);
+    if (d) d.open = true;
+  }
+  grid.classList.toggle('custom-sort', sortMode === 'custom');
+}
+
+function renderSortBar() {
+  for (const b of document.querySelectorAll('#sortbar [data-sort]')) b.setAttribute('aria-pressed', String(b.dataset.sort === sortMode));
+  $('sort-hint').hidden = sortMode !== 'custom';
+}
+document.getElementById('sortbar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sort]');
+  if (!b) return;
+  if (b.dataset.sort === 'custom' && sortMode !== 'custom' && !customOrder.length) {
+    customOrder = [...$('grid').querySelectorAll('.card')].map(c => c.dataset.key);   // start from what's on screen
+    store.set(ORDER_KEY, customOrder);
+  }
+  sortMode = b.dataset.sort;
+  store.set(SORT_KEY, sortMode);
+  renderSortBar();
+  renderGrid();
+});
+
+// ── Drag and drop (Custom only). Pointer events, so it works with mouse and touch.
+$('grid').addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('.drag-handle');
+  if (!handle || sortMode !== 'custom') return;
+  const el = handle.closest('.card');
+  e.preventDefault();
+  dragging = el;
+  el.classList.add('dragging');
+  handle.setPointerCapture(e.pointerId);
+  // Hold near the top/bottom edge to scroll (phone cards are tall).
+  let lastY = e.clientY;
+  const edge = setInterval(() => {
+    if (lastY < 70) window.scrollBy(0, -18);
+    else if (lastY > window.innerHeight - 70) window.scrollBy(0, 18);
+  }, 16);
+  const move = (ev) => {
+    lastY = ev.clientY;
+    const over = document.elementFromPoint(ev.clientX, ev.clientY);
+    const target = over && over.closest('#grid .card');
+    if (!target || target === el) return;
+    const r = target.getBoundingClientRect();
+    const after = ev.clientY > r.top + r.height / 2 || (ev.clientX > r.left + r.width / 2 && ev.clientY > r.top);
+    target.parentNode.insertBefore(el, after ? target.nextSibling : target);
+  };
+  const up = () => {
+    clearInterval(edge);
+    handle.removeEventListener('pointermove', move);
+    handle.removeEventListener('pointerup', up);
+    handle.removeEventListener('pointercancel', up);
+    el.classList.remove('dragging');
+    customOrder = [...$('grid').querySelectorAll('.card')].map(c => c.dataset.key);
+    store.set(ORDER_KEY, customOrder);
+    dragging = null;
+    renderGrid();
+  };
+  handle.addEventListener('pointermove', move);
+  handle.addEventListener('pointerup', up);
+  handle.addEventListener('pointercancel', up);
+});
+
+renderSortBar();
 tick();
 setInterval(tick, POLL_MS);
