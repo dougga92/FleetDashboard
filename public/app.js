@@ -45,7 +45,18 @@ function meter(m) {
       </div>`;
 }
 
+function renderTiles(tiles) {
+  $('summary').innerHTML = tiles.map(t => `
+    <div class="tile">
+      <div class="tile-label">${t.label}</div>
+      <div class="tile-value ${t.cls}">${esc(t.value)}</div>
+      ${t.meter ? meter(t.meter) : ''}
+      <div class="tile-sub">${esc(t.sub)}</div>
+    </div>`).join('');
+}
+
 function renderSummary(s) {
+  if (viewDate) return renderDaySummary(shownVenues());
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
@@ -62,13 +73,7 @@ function renderSummary(s) {
         : 'last 60 min'),
       meter: { pct: s.acsPct, level: s.acsLevel } },
   ];
-  $('summary').innerHTML = tiles.map(t => `
-    <div class="tile">
-      <div class="tile-label">${t.label}</div>
-      <div class="tile-value ${t.cls}">${esc(t.value)}</div>
-      ${t.meter ? meter(t.meter) : ''}
-      <div class="tile-sub">${esc(t.sub)}</div>
-    </div>`).join('');
+  renderTiles(tiles);
 }
 
 // Running total for the venue's current event (all days). Older venue
@@ -130,8 +135,8 @@ function salesBlock(v) {
   if (!today && !ev) return '';
   return `
       <div class="mix">
-        <div class="mix-title">What's selling today</div>
-        ${today || '<div class="mix-row muted">No sales yet today</div>'}
+        <div class="mix-title">What's selling ${viewDate ? esc(dayName(viewDate)) : 'today'}</div>
+        ${today || `<div class="mix-row muted">${viewDate ? 'No sales' : 'No sales yet today'}</div>`}
         ${ev ? `<details class="mix-event"><summary>This event</summary>${ev}</details>` : ''}
       </div>`;
 }
@@ -210,7 +215,7 @@ function card(v, sale) {
 
       <div class="card-money">
         <span class="money">${money(t.revenue)}</span>
-        <span class="money-label">today</span>
+        <span class="money-label">${viewDate ? esc(dayName(viewDate)) : 'today'}</span>
       </div>
 
       ${eventBlock(v)}
@@ -238,14 +243,13 @@ async function tick() {
     const r = await fetch('/api/fleet', { headers: { Accept: 'application/json' } });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
-    renderSummary(data.summary);
     if (data.dashboardVersion) $('app-ver').textContent = 'v' + data.dashboardVersion;
     lastVenues = data.venues;
+    lastSummary = data.summary;
     latestVersion = data.venues.map(v => v.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
-    detectSales(data.venues);
-    if (!dragging) renderGrid();
-    renderCharts(data.venues);
-    $('empty').hidden = data.venues.length > 0;
+    detectSales(data.venues);           // sales + sound always follow the live numbers
+    if (Date.now() - historyAt > HISTORY_MS || data.venues.some(v => v.dayCount && !venueHistory.has(keyOf(v)))) loadHistory();
+    renderView();
     const when = new Date(data.generatedAt).toLocaleTimeString();
     $('updated').textContent = 'updated ' + when;
     $('live').style.background = 'var(--green)';
@@ -305,8 +309,8 @@ function renderGrid() {
   const grid = $('grid');
   // Keep "This event" panels open across refreshes.
   const open = new Set([...grid.querySelectorAll('.card')].filter(c => c.querySelector('.mix-event[open]')).map(c => c.dataset.key));
-  grid.innerHTML = sorted(lastVenues).map(v => {
-    const p = pulses.get(keyOf(v));
+  grid.innerHTML = sorted(shownVenues()).map(v => {
+    const p = viewDate ? null : pulses.get(keyOf(v));
     return card(v, p || null);   // pulses expire (6 s) before the next poll (10 s), so each shows once
   }).join('');
   for (const k of open) {
@@ -432,9 +436,9 @@ renderSoundBtn();
 const shortName = (v) => String(v.venue || 'Unknown').split(' - ')[0].trim();
 const evAvg = (v) => { const e = v.eventTotals; return e && Number(e.orders) > 0 ? Number(e.revenue) / Number(e.orders) : null; };
 const CHARTS = [
-  { title: "Today's revenue", val: v => rev(v), fmt: n => money(n).replace(/\.00$/, '') },
-  { title: 'Orders today', val: v => Number(v.today && v.today.orders) || 0, fmt: n => num(n) },
-  { title: 'Photo → sale today', val: v => { const t = v.today || {}; return Number(t.photos) > 0 ? (Number(t.orders) || 0) / Number(t.photos) * 100 : null; }, fmt: n => n.toFixed(1) + '%' },
+  { title: () => viewDate ? 'Revenue ' + dayName(viewDate) : "Today's revenue", val: v => rev(v), fmt: n => money(n).replace(/\.00$/, '') },
+  { title: () => viewDate ? 'Orders ' + dayName(viewDate) : 'Orders today', val: v => Number(v.today && v.today.orders) || 0, fmt: n => num(n) },
+  { title: () => 'Photo → sale ' + (viewDate ? dayName(viewDate) : 'today'), val: v => { const t = v.today || {}; return Number(t.photos) > 0 ? (Number(t.orders) || 0) / Number(t.photos) * 100 : null; }, fmt: n => n.toFixed(1) + '%' },
   { title: 'This event revenue', val: v => v.eventTotals ? Number(v.eventTotals.revenue) || 0 : null, fmt: n => money(n).replace(/\.00$/, '') },
   { title: 'Avg order, this event', val: evAvg, fmt: n => money(n) },
 ];
@@ -442,7 +446,7 @@ function tipFor(v) {
   const t = v.today || {}, e = v.eventTotals;
   return [
     esc(v.venue || 'Unknown venue') + (v.online ? '' : ' (offline)'),
-    `Today: ${money(t.revenue)} · ${num(t.orders)} orders · ${saleRate(t.orders, t.photos)} photo→sale`,
+    `${viewDate ? esc(dayName(viewDate)) : 'Today'}: ${money(t.revenue)} · ${num(t.orders)} orders · ${saleRate(t.orders, t.photos)} photo→sale`,
     e ? `This event: ${money(e.revenue)} · ${num(e.orders)} orders · avg ${avgText(e.revenue, e.orders)}` : 'This event: not reported',
   ].join('<br>');
 }
@@ -455,7 +459,7 @@ function renderCharts(venues) {
     const max = Math.max(0, ...rows.map(r => r.n || 0));
     return `
       <figure class="chart">
-        <figcaption>${esc(c.title)}</figcaption>
+        <figcaption>${esc(typeof c.title === 'function' ? c.title() : c.title)}</figcaption>
         <ol class="bars">${rows.map(r => `
           <li class="bar-row${r.v.online ? '' : ' bar-off'}" tabindex="0" data-tip="${esc(tipFor(r.v))}">
             <span class="bar-name">${esc(shortName(r.v))}</span>
@@ -470,7 +474,7 @@ function renderCharts(venues) {
 $('compare').open = store.get('fleet.compare', window.innerWidth >= 700);   // phones start collapsed
 $('compare').addEventListener('toggle', () => {
   store.set('fleet.compare', $('compare').open);
-  if ($('compare').open) renderCharts(lastVenues);
+  if ($('compare').open) renderCharts(shownVenues());
 });
 // Tooltip: hover (mouse), focus (keyboard) or tap (touch).
 function showTip(row) {
@@ -486,8 +490,187 @@ $('charts').addEventListener('pointerover', (e) => { const row = e.target.closes
 $('charts').addEventListener('pointerleave', hideTip);
 $('charts').addEventListener('focusin', (e) => { const row = e.target.closest('.bar-row'); if (row) showTip(row); });
 $('charts').addEventListener('focusout', hideTip);
-document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.bar-row')) hideTip(); });
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.bar-row, .col')) hideTip(); });
+
+// ── Past days: date picker + night-by-night charts ──
+// Venues send `days` (their own per-date totals, venue-local dates, today
+// included), fetched from /api/history about once a minute. Picking a past date
+// swaps each card's "today" numbers for that date's row; the live date always
+// uses the fresher heartbeat `today`. Sales, pulses and sound stay live.
+const HISTORY_MS = 60000;
+let venueHistory = new Map();         // venue key -> { todayDate, days: [{ date, event, orders, revenue, photos, emails, emailsAcs, sales }] }
+let historyAt = 0, historyBusy = false;
+let viewDate = null;             // null = live; else 'YYYY-MM-DD' (not saved: every visit starts live)
+let lastSummary = null;
+let histMeasure = store.get('fleet.histMeasure', 'revenue');
+
+const localISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dateObj = (iso) => new Date(iso + 'T12:00:00');
+const dayName = (iso) => dateObj(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const shortDay = (iso) => dateObj(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+function loadHistory() {
+  if (historyBusy) return;
+  historyBusy = true;
+  fetch('/api/history', { headers: { Accept: 'application/json' } })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(j => { venueHistory = new Map((j.venues || []).map(h => [String(h.key), h])); historyAt = Date.now(); renderView(); })
+    .catch(() => { historyAt = Date.now() - HISTORY_MS + 15000; })   // retry in ~15 s
+    .finally(() => { historyBusy = false; });
+}
+const daysOf = (v) => (venueHistory.get(keyOf(v)) || {}).days || [];
+// The venue's own "today" (its time zone), so a late-night venue out west stays on its date.
+function liveDate(v) {
+  const h = venueHistory.get(keyOf(v)) || {};
+  return h.todayDate || (v.today && v.today.date) || (daysOf(v)[0] || {}).date || localISO();
+}
+function recordFor(v, date) {
+  if (date === liveDate(v)) return v.today || {};
+  return daysOf(v).find(d => d.date === date) || null;
+}
+function shownVenues() {
+  if (!viewDate) return lastVenues;
+  return lastVenues.map(v => {
+    const r = recordFor(v, viewDate);
+    return r ? { ...v, today: r, event: r.event || v.event } : null;
+  }).filter(Boolean);
+}
+const liveDates = () => new Set(lastVenues.map(liveDate));
+// Every date any venue has a row for, oldest first.
+function allDates() {
+  const set = liveDates();
+  for (const v of lastVenues) for (const d of daysOf(v)) set.add(d.date);
+  return [...set].sort();
+}
+const pastDates = () => { const live = liveDates(); return allDates().filter(d => !live.has(d)).reverse(); };   // newest first
+const hasHistory = () => lastVenues.some(v => daysOf(v).length);
+
+function renderDaySummary(list) {
+  const sumOf = (f) => list.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);
+  const revenue = Math.round(sumOf(t => t.revenue) * 100) / 100, orders = sumOf(t => t.orders);
+  const photos = sumOf(t => t.photos), emails = sumOf(t => t.emails), acs = sumOf(t => t.emailsAcs);
+  const active = list.filter(v => (Number(v.today.orders) || 0) + (Number(v.today.photos) || 0) > 0).length;
+  renderTiles([
+    { label: dayName(viewDate), value: `${active} venue${active === 1 ? '' : 's'}`, cls: '', sub: 'with photos or sales' },
+    { label: 'Revenue', value: money(revenue), cls: '', sub: `${num(orders)} order${orders === 1 ? '' : 's'}` },
+    { label: 'Avg per order', value: avgText(revenue, orders), cls: '', sub: dayName(viewDate) },
+    { label: 'Photos', value: num(photos), cls: '', sub: `${saleRate(orders, photos)} photo→sale` },
+    { label: 'Emails sent', value: num(emails), cls: '', sub: `${num(acs)} via ACS` },
+  ]);
+}
+
+function renderDaySelect() {
+  const sel = $('day-select'), past = pastDates();
+  const want = [''].concat(past);
+  if (sel.options.length !== want.length || [...sel.options].some((o, i) => o.value !== want[i])) {
+    sel.innerHTML = '<option value="">Today (live)</option>' + past.map(d => `<option value="${d}">${esc(dayName(d))}</option>`).join('');
+  }
+  if (viewDate && !past.includes(viewDate)) sel.insertAdjacentHTML('beforeend', `<option value="${viewDate}">${esc(dayName(viewDate))}</option>`);
+  sel.value = viewDate || '';
+  const i = want.indexOf(viewDate || '');
+  $('day-prev').disabled = i < 0 || i >= want.length - 1;
+  $('day-next').disabled = i <= 0;
+  sel.disabled = past.length === 0;
+  $('day-live').hidden = !viewDate;
+  $('day-hint').textContent = !hasHistory() && lastVenues.length ? 'Past dates appear once venues update' : '';
+  document.body.classList.toggle('past-view', !!viewDate);
+}
+function setView(date) {
+  viewDate = date || null;
+  hideTip();
+  renderView();
+}
+$('day-select').addEventListener('change', (e) => setView(e.target.value));
+$('day-live').addEventListener('click', () => setView(null));
+$('day-prev').addEventListener('click', () => { const w = [''].concat(pastDates()); setView(w[Math.min(w.length - 1, w.indexOf(viewDate || '') + 1)]); });
+$('day-next').addEventListener('click', () => { const w = [''].concat(pastDates()); setView(w[Math.max(0, w.indexOf(viewDate || '') - 1)]); });
+
+// Night by night: one column per date (last 21 dates any venue was active),
+// fleet total on top, then one small chart per venue on a shared scale.
+// One hue throughout; the selected date gets a ring. Tap a column to open that date.
+const HIST_DAYS = 21;
+const HIST_MEASURES = {
+  revenue: { label: 'Revenue', fmt: n => money(n).replace(/\.00$/, '') },
+  orders:  { label: 'Orders',  fmt: n => num(n) },
+  photos:  { label: 'Photos',  fmt: n => num(n) },
+};
+function renderHistControls() {
+  for (const b of document.querySelectorAll('[data-hm]')) b.setAttribute('aria-pressed', String(b.dataset.hm === histMeasure));
+}
+document.querySelector('.hist-controls').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-hm]');
+  if (!b) return;
+  histMeasure = b.dataset.hm;
+  store.set('fleet.histMeasure', histMeasure);
+  renderHistControls();
+  renderHistory();
+});
+function columns(dates, valOf, max, tipOf, label) {
+  const live = liveDates(), m = HIST_MEASURES[histMeasure];
+  return `
+    <div class="cols" role="list" aria-label="${esc(label)}">${dates.map(d => {
+      const n = valOf(d), sel = viewDate ? d === viewDate : live.has(d);
+      return `<button type="button" role="listitem" class="col${sel ? ' col-sel' : ''}" data-date="${d}" data-tip="${esc(tipOf(d, n))}" aria-label="${esc(dayName(d) + ': ' + m.fmt(n))}"><span class="col-bar" style="height:${max > 0 && n > 0 ? Math.max(3, (n / max) * 100) : 0}%"></span></button>`;
+    }).join('')}</div>
+    <div class="col-axis"><span>${esc(shortDay(dates[0]))}</span><span>${live.has(dates[dates.length - 1]) ? 'Today' : esc(shortDay(dates[dates.length - 1]))}</span></div>`;
+}
+function renderHistory() {
+  const box = $('hist');
+  if (!box || !$('history').open) return;
+  if (!hasHistory()) {
+    box.innerHTML = '<p class="muted hist-empty">Past nights show here once venues send their daily history (needs the venue update).</p>';
+    return;
+  }
+  const m = HIST_MEASURES[histMeasure];
+  const dates = allDates().slice(-HIST_DAYS);
+  const val = (v, d) => { const r = recordFor(v, d); return r ? Number(r[histMeasure]) || 0 : 0; };
+  const fleetVal = (d) => lastVenues.reduce((s, v) => s + val(v, d), 0);
+  const fleetMax = Math.max(0, ...dates.map(fleetVal));
+  const venues = lastVenues.slice().sort((a, b) => dates.reduce((s, d) => s + val(b, d), 0) - dates.reduce((s, d) => s + val(a, d), 0) || byName(a, b));
+  const venueMax = Math.max(0, ...venues.flatMap(v => dates.map(d => val(v, d))));
+  const fleetTip = (d, n) => {
+    const rows = lastVenues.map(v => [shortName(v), val(v, d)]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
+    return `<b>${esc(dayName(d))}</b> · ${esc(m.fmt(n))}` + rows.map(r => `<br>${esc(r[0])}: ${esc(m.fmt(r[1]))}`).join('');
+  };
+  const venueTip = (v) => (d, n) => {
+    const r = recordFor(v, d) || {};
+    return `<b>${esc(shortName(v))} · ${esc(dayName(d))}</b><br>${money(r.revenue)} · ${num(r.orders)} orders · ${num(r.photos)} photos` + (r.event ? `<br>${esc(r.event)}` : '');
+  };
+  const total = (v) => dates.reduce((s, d) => s + val(v, d), 0);
+  box.innerHTML = `
+    <figure class="chart hist-fleet">
+      <figcaption>${esc(m.label)} by night · whole fleet · <span class="muted">last ${dates.length} active date${dates.length === 1 ? '' : 's'}</span></figcaption>
+      ${columns(dates, fleetVal, fleetMax, fleetTip, m.label + ' by night, whole fleet')}
+    </figure>
+    <div class="hist-grid">${venues.map(v => `
+      <figure class="chart hist-venue">
+        <figcaption><span>${esc(shortName(v))}</span><span class="hist-total">${esc(m.fmt(total(v)))}</span></figcaption>
+        ${columns(dates, d => val(v, d), venueMax, venueTip(v), m.label + ' by night, ' + shortName(v))}
+      </figure>`).join('')}
+    </div>`;
+}
+$('history').addEventListener('toggle', () => { store.set('fleet.history', $('history').open); renderHistory(); });
+$('hist').addEventListener('click', (e) => {
+  const c = e.target.closest('.col');
+  if (!c) return;
+  setView(liveDates().has(c.dataset.date) ? null : c.dataset.date);
+});
+$('hist').addEventListener('pointerover', (e) => { const c = e.target.closest('.col'); if (c) showTip(c); });
+$('hist').addEventListener('pointerleave', hideTip);
+$('hist').addEventListener('focusin', (e) => { const c = e.target.closest('.col'); if (c) showTip(c); });
+$('hist').addEventListener('focusout', hideTip);
+
+function renderView() {
+  renderDaySelect();
+  if (lastSummary) renderSummary(lastSummary);
+  if (!dragging) renderGrid();
+  renderCharts(shownVenues());
+  renderHistory();
+  $('empty').hidden = lastVenues.length > 0;
+}
 
 renderSortBar();
+renderHistControls();
+$('history').open = store.get('fleet.history', window.innerWidth >= 700);
 tick();
 setInterval(tick, POLL_MS);

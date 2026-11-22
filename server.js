@@ -14,7 +14,7 @@ const APP_VERSION = require('./package.json').version;   // the board's own vers
 
 const app = express();
 app.set('trust proxy', true);
-app.use(express.json({ limit: '64kb' }));
+app.use(express.json({ limit: '512kb' }));   // room for the per-day history (days[])
 
 // ── Config (all via env; sensible dev defaults) ──────────────────────────────
 const INGEST_KEY  = process.env.INGEST_KEY || '';                 // shared venue key; '' = accept any (dev only)
@@ -99,9 +99,9 @@ function dashAuth(req, res, next) {
 app.get('/api/fleet', dashAuth, (_req, res) => {
   const now = Date.now();
   const venues = [...fleet.values()]
-    .map(v => {
+    .map(({ days, ...v }) => {           // days[] is served by /api/history, not every 10 s poll
       const ageSec = Math.round((now - v.receivedAt) / 1000);
-      return { ...v, ageSec, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
+      return { ...v, ageSec, dayCount: Array.isArray(days) ? days.length : 0, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
                serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS };
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
@@ -152,6 +152,26 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     generatedAt: new Date().toISOString(),
     dashboardVersion: APP_VERSION,
   });
+});
+
+// ── Past days ────────────────────────────────────────────────────────────────
+// Venues send `days`: their own per-day totals (one row per local date with any
+// activity, newest first, today included). The board fetches it about once a
+// minute for the date picker and the night-by-night charts. Nothing is stored
+// here beyond the latest heartbeat: the venue's database is the record, and it
+// resends the list every heartbeat, so a restart loses nothing once venues report.
+const MAX_DAYS = 120;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+app.get('/api/history', dashAuth, (_req, res) => {
+  const venues = [...fleet.values()].map(v => ({
+    key: venueKey(v),
+    venue: v.venue,
+    todayDate: v.today && DATE_RE.test(v.today.date || '') ? v.today.date : null,
+    days: (Array.isArray(v.days) ? v.days : [])
+      .filter(d => d && DATE_RE.test(d.date || ''))
+      .slice(0, MAX_DAYS),
+  }));
+  res.json({ venues, generatedAt: new Date().toISOString() });
 });
 
 // ── Static board ─────────────────────────────────────────────────────────────

@@ -193,3 +193,35 @@ body {
 .bar { display: block; height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; }
 .bar-val { font-size: 0.82rem; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; min-width: 3.5em; }
 .chart-tip { position: absolute; z-index: 10; max-width: min(320px, calc(100vw - 16px)); background: #0b1220; color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+
+/* Past days: date picker + night-by-night columns */
+.daybar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.day-pick { display: inline-flex; align-items: center; gap: 4px; }
+.daybar select, .daybar button { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.85rem; }
+.daybar select { cursor: pointer; }
+.daybar button { cursor: pointer; }
+.daybar .day-step { width: 34px; padding: 6px 0; text-align: center; }
+.daybar button:disabled, .daybar select:disabled { opacity: 0.45; cursor: default; }
+.daybar .day-live { background: rgba(34,197,94,.16); border-color: rgba(34,197,94,.5); color: var(--green); }
+.daybar .sort-hint { flex-basis: auto; }
+/* Past view: the date control is the one thing that changed, so it stands out */
+body.past-view .daybar select { border-color: var(--blue); color: var(--blue); font-weight: 600; }
+.hist-controls { display: flex; gap: 6px; margin-bottom: 10px; }
+.hist-controls button { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 0.82rem; cursor: pointer; }
+.hist-controls button[aria-pressed="true"] { background: rgba(57,135,229,.18); border-color: rgba(57,135,229,.6); }
+.hist-fleet { margin-bottom: 12px; }
+.hist-fleet .cols { height: 120px; }
+.hist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.hist-venue figcaption { display: flex; justify-content: space-between; gap: 8px; }
+.hist-venue figcaption span:first-child { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 0.88rem; }
+.hist-total { color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.cols { display: flex; align-items: flex-end; gap: 2px; height: 64px; border-bottom: 1px solid var(--border-strong); }
+.col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; padding: 0; background: none; border: 0; border-radius: 4px 4px 0 0; cursor: pointer; }
+.col:hover, .col:focus-visible { background: var(--surface-2); outline: none; }
+.col-bar { display: block; width: 100%; background: var(--series-1); border-radius: 4px 4px 0 0; }
+.col-sel .col-bar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+.col-sel { background: var(--surface-2); }
+.col-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.72rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.hist-empty { margin: 0; font-size: 0.85rem; }
+#hist { --series-1: #3987e5; }
+.hist-empty, .chart figcaption .muted { color: var(--muted); }

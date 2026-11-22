@@ -20,7 +20,25 @@
   </header>
 
   <main class="wrap">
+    <div class="daybar" id="daybar">
+      <button type="button" id="day-prev" class="day-step" aria-label="Previous day">‹</button>
+      <label class="day-pick"><span class="sort-label">Showing</span>
+        <select id="day-select" aria-label="Day to show"><option value="">Today (live)</option></select>
+      </label>
+      <button type="button" id="day-next" class="day-step" aria-label="Next day">›</button>
+      <button type="button" id="day-live" class="day-live" hidden>Back to live</button>
+      <span class="sort-hint" id="day-hint"></span>
+    </div>
     <section class="summary" id="summary" aria-label="Fleet summary"></section>
+    <details class="compare" id="history">
+      <summary>Night by night</summary>
+      <div class="hist-controls" role="group" aria-label="Measure">
+        <button type="button" data-hm="revenue">Revenue</button>
+        <button type="button" data-hm="orders">Orders</button>
+        <button type="button" data-hm="photos">Photos</button>
+      </div>
+      <div id="hist"></div>
+    </details>
     <details class="compare" id="compare">
       <summary>Compare venues</summary>
       <div class="charts" id="charts"></div>

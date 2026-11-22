@@ -71,6 +71,7 @@ it show nothing.
 |--------|------|-----|---------|
 | POST | `/api/heartbeat` | venues | ingest a heartbeat (sends `x-venue-key`) |
 | GET  | `/api/fleet` | board | latest snapshot + summary (behind Basic auth) |
+| GET  | `/api/history` | board | each venue's `days` list (behind Basic auth) |
 | GET  | `/` | board | the live status board (behind Basic auth) |
 | GET  | `/healthz` | — | health check |
 
@@ -162,5 +163,28 @@ A collapsible "Compare venues" section above the cards: ranked horizontal bars
 (one hue, `#3987e5`, validated on the card surface) for today's revenue, orders
 today, photo → sale today, this event revenue and avg order this event. Hover,
 focus or tap a row for the venue's detail. Open/closed is saved per browser
-(phones start collapsed). The board keeps no history, so there are no
-over-time line charts yet.
+(phones start collapsed). For past dates and trends see *Past days*.
+
+## Past days
+
+Venues send `days` in the heartbeat: one row per venue-local date that had any
+photos or orders, newest first, **today included**, up to 120 rows (the venue
+also sends `today.date`, its own local date). Same money rules as `today`
+(non-voided orders):
+
+```json
+"today": { "date": "2026-11-22", "orders": 20, "...": "..." },
+"days": [
+  { "date": "2026-11-21", "event": "Light The Park", "orders": 43, "revenue": 1697.69,
+    "photos": 430, "emails": 46, "emailsAcs": 43, "sales": { "...": "same shape as today.sales" } }
+]
+```
+
+`/api/fleet` leaves `days` out (it only reports `dayCount`), and the board loads
+`/api/history` about once a minute. The **Showing** picker (‹ › and a date list)
+switches the tiles, cards, What's selling and Compare charts to that date; sales
+pulses and the sound stay live. **Night by night** shows the last 21 active
+dates as columns (fleet total, then one small chart per venue on a shared scale;
+Revenue / Orders / Photos); tap a column to open that date. Nothing is stored
+here: the venue database is the record, so a restart loses no history, but a
+venue whose PC is off shows no history until it reports again.
