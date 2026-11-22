@@ -33,6 +33,11 @@ const ACS_HOURLY_EMAIL_CAP = Number(process.env.ACS_HOURLY_EMAIL_CAP) > 0 ? Numb
 // ACS meters a ROLLING hour. ACS_WINDOW_SEC exists only to test the roll-off locally.
 const HOUR_MS = (Number(process.env.ACS_WINDOW_SEC) || 3600) * 1000;
 const STARTED_AT = Date.now();
+// Venues left out of the fleet money totals (their own card still shows their
+// sales). Comma-separated, case-insensitive match on the venue name. Default:
+// AJ's Waltz Photo, which gives prints/digitals away for toy donations.
+const TOTALS_EXCLUDE = (process.env.TOTALS_EXCLUDE ?? 'Waltz Photo').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const inTotals = (v) => !TOTALS_EXCLUDE.some(x => String(v.venue || '').toLowerCase().includes(x));
 
 // Latest heartbeat per venue, keyed by machineId (stable per box) then venue name.
 const fleet = new Map();
@@ -101,7 +106,7 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const venues = [...fleet.values()]
     .map(({ days, ...v }) => {           // days[] is served by /api/history, not every 10 s poll
       const ageSec = Math.round((now - v.receivedAt) / 1000);
-      return { ...v, ageSec, dayCount: Array.isArray(days) ? days.length : 0, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
+      return { ...v, ageSec, inTotals: inTotals(v), dayCount: Array.isArray(days) ? days.length : 0, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
                serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS };
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
@@ -110,7 +115,8 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   // Running event totals come from each venue (eventTotals in the heartbeat).
   // Demo / test-print events are left out of the combined total.
   const isDemo = (v) => /\(DEMO\)/i.test(v.event || '');
-  const withEvent = venues.filter(v => v.eventTotals && !isDemo(v));
+  const counted = venues.filter(v => v.inTotals);
+  const withEvent = counted.filter(v => v.eventTotals && !isDemo(v));
 
   // Emails sent today. `emails` = every send (ACS + Microsoft 365); `emailsAcs` =
   // ACS sends only. Both are one per send-API call. Stale (offline) venues and
@@ -135,8 +141,9 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       total:        venues.length,
       online:       venues.filter(v => v.online).length,
       offline:      venues.filter(v => !v.online).length,
-      todayRevenue: Math.round(sum(v => v.today && v.today.revenue) * 100) / 100,
-      todayOrders:  sum(v => v.today && v.today.orders),
+      todayRevenue: Math.round(sum(v => v.today && v.today.revenue, counted) * 100) / 100,
+      todayOrders:  sum(v => v.today && v.today.orders, counted),
+      excluded:     venues.filter(v => !v.inTotals).map(v => v.venue),
       eventRevenue:  Math.round(sum(v => v.eventTotals.revenue, withEvent) * 100) / 100,
       eventOrders:   sum(v => v.eventTotals.orders, withEvent),
       eventVenues:   withEvent.length,

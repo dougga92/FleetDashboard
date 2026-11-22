@@ -55,16 +55,18 @@ function renderTiles(tiles) {
     </div>`).join('');
 }
 
+const counts = (v) => v.inTotals !== false;     // false = left out of fleet money totals (AJ's Waltz Photo)
+const exclNote = (names) => names && names.length ? ' · excl. ' + names.map(n => String(n).split(' - ')[0]).join(', ') : '';
 function renderSummary(s) {
   if (viewDate) return renderDaySummary(shownVenues());
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
     { label: 'All events to date', value: money(s.eventRevenue), cls: '',
-      sub: `${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}` },
+      sub: `${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}${exclNote(s.excluded)}` },
     { label: 'Avg per order', value: avgText(s.eventRevenue, s.eventOrders), cls: '',
       sub: `all events · today ${avgText(s.todayRevenue, s.todayOrders)}` },
-    { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}` },
+    { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}${exclNote(s.excluded)}` },
     { label: 'Emails sent today (fleet)', value: num(s.todayEmails), cls: '',
       sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
     { label: 'ACS hourly cap', value: `${num(s.acsHour)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
@@ -216,6 +218,7 @@ function card(v, sale) {
       <div class="card-money">
         <span class="money">${money(t.revenue)}</span>
         <span class="money-label">${viewDate ? esc(dayName(viewDate)) : 'today'}</span>
+        ${counts(v) ? '' : '<span class="not-total" title="Toy-donation prints and digitals: left out of the fleet totals">not in fleet totals</span>'}
       </div>
 
       ${eventBlock(v)}
@@ -445,7 +448,7 @@ const CHARTS = [
 function tipFor(v) {
   const t = v.today || {}, e = v.eventTotals;
   return [
-    esc(v.venue || 'Unknown venue') + (v.online ? '' : ' (offline)'),
+    esc(v.venue || 'Unknown venue') + (v.online ? '' : ' (offline)') + (counts(v) ? '' : ' · not in fleet totals'),
     `${viewDate ? esc(dayName(viewDate)) : 'Today'}: ${money(t.revenue)} · ${num(t.orders)} orders · ${saleRate(t.orders, t.photos)} photo→sale`,
     e ? `This event: ${money(e.revenue)} · ${num(e.orders)} orders · avg ${avgText(e.revenue, e.orders)}` : 'This event: not reported',
   ].join('<br>');
@@ -545,14 +548,17 @@ function allDates() {
 const pastDates = () => { const live = liveDates(); return allDates().filter(d => !live.has(d)).reverse(); };   // newest first
 const hasHistory = () => lastVenues.some(v => daysOf(v).length);
 
-function renderDaySummary(list) {
+function renderDaySummary(all) {
+  const list = all.filter(counts);
+  const excluded = all.filter(v => !counts(v)).map(v => v.venue);
   const sumOf = (f) => list.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);
   const revenue = Math.round(sumOf(t => t.revenue) * 100) / 100, orders = sumOf(t => t.orders);
-  const photos = sumOf(t => t.photos), emails = sumOf(t => t.emails), acs = sumOf(t => t.emailsAcs);
-  const active = list.filter(v => (Number(v.today.orders) || 0) + (Number(v.today.photos) || 0) > 0).length;
+  const sumAll = (f) => all.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);   // emails: every venue uses the real ACS quota
+  const photos = sumOf(t => t.photos), emails = sumAll(t => t.emails), acs = sumAll(t => t.emailsAcs);
+  const active = all.filter(v => (Number(v.today.orders) || 0) + (Number(v.today.photos) || 0) > 0).length;
   renderTiles([
     { label: dayName(viewDate), value: `${active} venue${active === 1 ? '' : 's'}`, cls: '', sub: 'with photos or sales' },
-    { label: 'Revenue', value: money(revenue), cls: '', sub: `${num(orders)} order${orders === 1 ? '' : 's'}` },
+    { label: 'Revenue', value: money(revenue), cls: '', sub: `${num(orders)} order${orders === 1 ? '' : 's'}${exclNote(excluded)}` },
     { label: 'Avg per order', value: avgText(revenue, orders), cls: '', sub: dayName(viewDate) },
     { label: 'Photos', value: num(photos), cls: '', sub: `${saleRate(orders, photos)} photo→sale` },
     { label: 'Emails sent', value: num(emails), cls: '', sub: `${num(acs)} via ACS` },
@@ -624,12 +630,13 @@ function renderHistory() {
   const m = HIST_MEASURES[histMeasure];
   const dates = allDates().slice(-HIST_DAYS);
   const val = (v, d) => { const r = recordFor(v, d); return r ? Number(r[histMeasure]) || 0 : 0; };
-  const fleetVal = (d) => lastVenues.reduce((s, v) => s + val(v, d), 0);
+  const fleetVal = (d) => lastVenues.filter(counts).reduce((s, v) => s + val(v, d), 0);
+  const excl = lastVenues.filter(v => !counts(v)).map(shortName);
   const fleetMax = Math.max(0, ...dates.map(fleetVal));
   const venues = lastVenues.slice().sort((a, b) => dates.reduce((s, d) => s + val(b, d), 0) - dates.reduce((s, d) => s + val(a, d), 0) || byName(a, b));
   const venueMax = Math.max(0, ...venues.flatMap(v => dates.map(d => val(v, d))));
   const fleetTip = (d, n) => {
-    const rows = lastVenues.map(v => [shortName(v), val(v, d)]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
+    const rows = lastVenues.filter(counts).map(v => [shortName(v), val(v, d)]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
     return `<b>${esc(dayName(d))}</b> · ${esc(m.fmt(n))}` + rows.map(r => `<br>${esc(r[0])}: ${esc(m.fmt(r[1]))}`).join('');
   };
   const venueTip = (v) => (d, n) => {
@@ -639,7 +646,7 @@ function renderHistory() {
   const total = (v) => dates.reduce((s, d) => s + val(v, d), 0);
   box.innerHTML = `
     <figure class="chart hist-fleet">
-      <figcaption>${esc(m.label)} by night · whole fleet · <span class="muted">last ${dates.length} active date${dates.length === 1 ? '' : 's'}</span></figcaption>
+      <figcaption>${esc(m.label)} by night · whole fleet · <span class="muted">last ${dates.length} active date${dates.length === 1 ? '' : 's'}${excl.length ? ' · excl. ' + esc(excl.join(', ')) : ''}</span></figcaption>
       ${columns(dates, fleetVal, fleetMax, fleetTip, m.label + ' by night, whole fleet')}
     </figure>
     <div class="hist-grid">${venues.map(v => `

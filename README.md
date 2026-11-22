@@ -188,3 +188,14 @@ dates as columns (fleet total, then one small chart per venue on a shared scale;
 Revenue / Orders / Photos); tap a column to open that date. Nothing is stored
 here: the venue database is the record, so a restart loses no history, but a
 venue whose PC is off shows no history until it reports again.
+
+## Venues left out of the totals
+
+`TOTALS_EXCLUDE` (app setting, comma-separated, case-insensitive match on the
+venue name; default `Waltz Photo`) keeps a venue out of the fleet money totals:
+All events to date, Avg per order, Today's revenue, the past-day tiles and the
+Night by night fleet chart. AJ's Waltz Photo gives prints and digitals away for
+toy donations, so its numbers would skew the totals. Its own card (marked "not in fleet
+totals"), its Compare bars and its night-by-night mini chart still show its
+sales. Emails still count (the ACS quota is shared). Set `TOTALS_EXCLUDE=` (empty)
+to count every venue.

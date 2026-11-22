@@ -225,3 +225,4 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 .hist-empty { margin: 0; font-size: 0.85rem; }
 #hist { --series-1: #3987e5; }
 .hist-empty, .chart figcaption .muted { color: var(--muted); }
+.not-total { margin-left: auto; align-self: center; font-size: 0.7rem; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
