@@ -226,3 +226,17 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 #hist { --series-1: #3987e5; }
 .hist-empty, .chart figcaption .muted { color: var(--muted); }
 .not-total { margin-left: auto; align-self: center; font-size: 0.7rem; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+/* RustDesk note on each card */
+.rd { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.rd > summary { cursor: pointer; font-size: 0.78rem; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; }
+.rd > summary::-webkit-details-marker { display: none; }
+.rd[open] > summary { color: var(--text); border-color: var(--border-strong); }
+.rd-count { font-size: 0.7rem; background: var(--surface-2); border-radius: 999px; padding: 0 6px; }
+.rd-note { color: var(--muted); font-size: 0.8rem; margin: 8px 0 0; }
+.rd-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.rd-list li { display: grid; grid-template-columns: 6.5em 1fr auto; align-items: center; gap: 4px 8px; font-size: 0.85rem; }
+.rd-label { color: var(--muted); }
+.rd-id { color: var(--text); font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-decoration: none; }
+.rd-id:hover { text-decoration: underline; }
+.rd-copy { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 0.75rem; cursor: pointer; }
+.rd-mnote { grid-column: 2 / -1; color: var(--amber); font-size: 0.75rem; }

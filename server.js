@@ -194,6 +194,15 @@ app.get('/api/sale-sound.mp3', dashAuth, (_req, res) => {
   if (!fs.existsSync(SALE_SOUND)) return res.status(404).end();
   res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').sendFile(SALE_SOUND);
 });
+// RustDesk IDs per venue: private/rustdesk.json (gitignored, public repo;
+// deployed in the zip like the sound), only behind the board password.
+// [{ match: "<venue name substring>", note?, machines: [{ label, id, note? }] }]
+const RUSTDESK_FILE = path.join(__dirname, 'private', 'rustdesk.json');
+app.get('/api/rustdesk', dashAuth, (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try { res.json(JSON.parse(fs.readFileSync(RUSTDESK_FILE, 'utf8'))); }
+  catch { res.json([]); }
+});
 app.use('/assets', express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req, res) => res.json({ ok: true, venues: fleet.size }));
 

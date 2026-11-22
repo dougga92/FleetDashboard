@@ -5,3 +5,4 @@ node_modules/
 
 # Licensed audio (Epidemic Sound): deployed, never committed (public repo)
 sounds/
+private/

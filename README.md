@@ -147,7 +147,7 @@ built-in two-note chime. `sounds/` is gitignored (licensed audio, public repo),
 so deploy with the file added to the zip:
 
 ```bash
-git archive -o fleet.zip HEAD && zip -q fleet.zip sounds/sale-sound.mp3
+git archive -o fleet.zip HEAD && zip -q fleet.zip sounds/sale-sound.mp3 private/rustdesk.json
 az webapp deploy -n fotomentum-fleet -g dougga_rg_6763 --src-path fleet.zip --type zip
 ```
 
@@ -199,3 +199,12 @@ toy donations, so its numbers would skew the totals. Its own card (marked "not i
 totals"), its Compare bars and its night-by-night mini chart still show its
 sales. Emails still count (the ACS quota is shared). Set `TOTALS_EXCLUDE=` (empty)
 to count every venue.
+
+## RustDesk IDs
+
+Each card has a **RustDesk** note listing that venue's machine IDs: tap an ID to
+open it in RustDesk (`rustdesk://<id>`), or **Copy** it. The list is
+`private/rustdesk.json` (gitignored, since the repo is public), served only behind the board
+password at `/api/rustdesk`, and must be added to the deploy zip like the sound
+(see *Sale sound*). Format: `[{ "match": "<part of the venue name>", "note"?,
+"machines": [{ "label", "id", "note"? }] }]`. Edit the file and redeploy to change it.

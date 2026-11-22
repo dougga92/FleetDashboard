@@ -232,6 +232,7 @@ function card(v, sale) {
       </div>
 
       ${salesBlock(v)}
+      ${rustdeskBlock(v)}
 
       <div class="card-foot">
         ${machinesRow(v)}
@@ -312,12 +313,17 @@ function renderGrid() {
   const grid = $('grid');
   // Keep "This event" panels open across refreshes.
   const open = new Set([...grid.querySelectorAll('.card')].filter(c => c.querySelector('.mix-event[open]')).map(c => c.dataset.key));
+  const rdOpen = new Set([...grid.querySelectorAll('.card')].filter(c => c.querySelector('.rd[open]')).map(c => c.dataset.key));
   grid.innerHTML = sorted(shownVenues()).map(v => {
     const p = viewDate ? null : pulses.get(keyOf(v));
     return card(v, p || null);   // pulses expire (6 s) before the next poll (10 s), so each shows once
   }).join('');
   for (const k of open) {
     const d = grid.querySelector(`.card[data-key="${CSS.escape(k)}"] .mix-event`);
+    if (d) d.open = true;
+  }
+  for (const k of rdOpen) {
+    const d = grid.querySelector(`.card[data-key="${CSS.escape(k)}"] .rd`);
     if (d) d.open = true;
   }
   grid.classList.toggle('custom-sort', sortMode === 'custom');
@@ -675,6 +681,35 @@ function renderView() {
   renderHistory();
   $('empty').hidden = lastVenues.length > 0;
 }
+
+// ── RustDesk IDs (from /api/rustdesk, behind the board password) ──
+// Each card gets a "RustDesk" note: tap an ID to open it in RustDesk, or copy it.
+let rustdesk = [];
+fetch('/api/rustdesk').then(r => r.ok ? r.json() : []).then(j => { rustdesk = Array.isArray(j) ? j : []; if (lastVenues.length && !dragging) renderGrid(); }).catch(() => {});
+const rdFor = (v) => rustdesk.find(r => r && r.match && String(v.venue || '').toLowerCase().includes(String(r.match).toLowerCase()));
+const rdId = (id) => String(id).replace(/\s+/g, '');
+const rdShow = (id) => /^\d+$/.test(id) ? id.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : id;   // 461 541 652
+function rustdeskBlock(v) {
+  const r = rdFor(v);
+  if (!r || !Array.isArray(r.machines) || !r.machines.length) return '';
+  return `
+      <details class="rd">
+        <summary>🖥 RustDesk <span class="rd-count">${r.machines.length}</span></summary>
+        ${r.note ? `<div class="rd-note">${esc(r.note)}</div>` : ''}
+        <ul class="rd-list">${r.machines.map(m => { const id = rdId(m.id); return `
+          <li><span class="rd-label">${esc(m.label)}</span>
+            <a class="rd-id" href="rustdesk://${encodeURIComponent(id)}" title="Open in RustDesk">${esc(rdShow(id))}</a>
+            <button type="button" class="rd-copy" data-copy="${esc(id)}" aria-label="Copy ${esc(m.label)} ID">Copy</button>
+            ${m.note ? `<span class="rd-mnote">${esc(m.note)}</span>` : ''}</li>`; }).join('')}
+        </ul>
+      </details>`;
+}
+$('grid').addEventListener('click', (e) => {
+  const b = e.target.closest('.rd-copy');
+  if (!b) return;
+  const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy).then(done, () => {});
+});
 
 renderSortBar();
 renderHistControls();
