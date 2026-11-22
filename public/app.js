@@ -185,7 +185,7 @@ function cmpVersion(a, b) {
 function versionTag(ver) {
   if (!ver) return '<span class="ver ver-unknown" title="Version not reported">v?</span>';
   if (latestVersion && cmpVersion(ver, latestVersion) < 0) {
-    return `<span class="ver ver-old" title="Behind: latest is v${esc(latestVersion)}">v${esc(ver)} · update to v${esc(latestVersion)}</span>`;
+    return `<span class="ver ver-old" title="Behind: latest is v${esc(latestVersion)}">v${esc(ver)}</span>`;
   }
   return `<span class="ver ver-ok" title="Latest version">v${esc(ver)} ✓</span>`;
 }
