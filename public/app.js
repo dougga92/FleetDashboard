@@ -171,6 +171,25 @@ function machinesRow(v) {
   return `<div class="machines" aria-label="Machines">${parts.join('')}</div>`;
 }
 
+// Version badge: the newest version any venue reports counts as "latest";
+// venues behind it get an amber "update" tag. Compares 1.2.10 > 1.2.9 numerically.
+let latestVersion = null;
+function cmpVersion(a, b) {
+  const pa = String(a).split(/[.-]/).map(n => parseInt(n, 10) || 0);
+  const pb = String(b).split(/[.-]/).map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  }
+  return 0;
+}
+function versionTag(ver) {
+  if (!ver) return '<span class="ver ver-unknown" title="Version not reported">v?</span>';
+  if (latestVersion && cmpVersion(ver, latestVersion) < 0) {
+    return `<span class="ver ver-old" title="Behind: latest is v${esc(latestVersion)}">v${esc(ver)} · update to v${esc(latestVersion)}</span>`;
+  }
+  return `<span class="ver ver-ok" title="Latest version">v${esc(ver)} ✓</span>`;
+}
+
 const keyOf = (v) => String(v.machineId || v.venue || 'unknown');
 
 function card(v, sale) {
@@ -208,7 +227,8 @@ function card(v, sale) {
 
       <div class="card-foot">
         ${machinesRow(v)}
-        <span class="meta">${v.online ? 'updated ' + ago(v.ageSec) : 'last seen ' + ago(v.ageSec)}${v.version ? ' · v' + esc(v.version) : ''}</span>
+        <span class="meta">${v.online ? 'updated ' + ago(v.ageSec) : 'last seen ' + ago(v.ageSec)}</span>
+        ${versionTag(v.version)}
       </div>
     </div>`;
 }
@@ -220,6 +240,7 @@ async function tick() {
     const data = await r.json();
     renderSummary(data.summary);
     lastVenues = data.venues;
+    latestVersion = data.venues.map(v => v.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
     detectSales(data.venues);
     if (!dragging) renderGrid();
     $('empty').hidden = data.venues.length > 0;
