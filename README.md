@@ -161,13 +161,16 @@ replace the `fleet` Map in `server.js` with **Azure Table Storage**
 
 Each viewer turns sound on with the **Sound** button (saved per browser; after a
 reload, tap anywhere once so the browser allows audio). New sales play one sound
-per refresh. The sound is `sounds/sale-sound.mp3` (Epidemic Sound "Shout Woo Whoo", Doug's
-licence), served behind the board password; without it the board plays a
-built-in two-note chime. `sounds/` is gitignored (licensed audio, public repo),
-so deploy with the file added to the zip:
+per refresh: `sounds/sale-small.mp3` (Epidemic Sound "User Interface, Alert,
+Notification 13") for a sale under $100, `sounds/sale-big.mp3` (Epidemic Sound
+"Shout Woo Hoo") for $100 or more (`BIG_SALE` app setting; the amount is the new
+dollars ÷ new orders since the last refresh, tax included). Doug's Epidemic
+licence; served behind the board password; a missing file plays a built-in
+chime. `sounds/` is gitignored (licensed audio, public repo), so deploy with the
+files added to the zip:
 
 ```bash
-git archive -o fleet.zip HEAD && zip -q fleet.zip sounds/sale-sound.mp3 private/rustdesk.json
+git archive -o fleet.zip HEAD && zip -q fleet.zip sounds/sale-small.mp3 sounds/sale-big.mp3 private/rustdesk.json
 az webapp deploy -n fotomentum-fleet -g dougga_rg_6763 --src-path fleet.zip --type zip
 ```
 

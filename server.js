@@ -211,16 +211,19 @@ app.get('/api/history', dashAuth, (_req, res) => {
 
 // ── Static board ─────────────────────────────────────────────────────────────
 app.get('/', dashAuth, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-// Optional custom sale sound: sounds/sale-sound.mp3 replaces the built-in chime.
-// Licensed audio, so it's gitignored (public repo), deployed with the zip, and
-// only served behind the board password.
-const SALE_SOUND = path.join(__dirname, 'sounds', 'sale-sound.mp3');
+// Sale sounds: sounds/sale-small.mp3 (a sale under BIG_SALE, default $100) and
+// sounds/sale-big.mp3 ($100 or more); a missing file falls back to the built-in
+// chime. Licensed audio (Epidemic Sound), so gitignored (public repo), deployed
+// with the zip, and only served behind the board password.
+const SOUNDS = { small: 'sale-small.mp3', big: 'sale-big.mp3' };
+const soundPath = (k) => path.join(__dirname, 'sounds', SOUNDS[k]);
+const BIG_SALE = Number(process.env.BIG_SALE) > 0 ? Number(process.env.BIG_SALE) : 100;
 app.get('/api/sale-sound', dashAuth, (_req, res) => {
-  res.json({ custom: fs.existsSync(SALE_SOUND) });
+  res.json({ small: fs.existsSync(soundPath('small')), big: fs.existsSync(soundPath('big')), bigSale: BIG_SALE });
 });
-app.get('/api/sale-sound.mp3', dashAuth, (_req, res) => {
-  if (!fs.existsSync(SALE_SOUND)) return res.status(404).end();
-  res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').sendFile(SALE_SOUND);
+app.get('/api/sale-sound/:kind.mp3', dashAuth, (req, res) => {
+  if (!SOUNDS[req.params.kind] || !fs.existsSync(soundPath(req.params.kind))) return res.status(404).end();
+  res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').sendFile(soundPath(req.params.kind));
 });
 // RustDesk IDs per venue: private/rustdesk.json (gitignored, public repo;
 // deployed in the zip like the sound), only behind the board password.

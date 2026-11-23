@@ -366,16 +366,20 @@ const pulses = new Map();        // key -> { orders, revenue, until }
 function detectSales(venues) {
   const now = Date.now();
   const next = new Map();
+  let sold = false, big = false;
   for (const v of venues) {
     const t = v.today || {};
     const cur = { orders: Number(t.orders) || 0, revenue: Number(t.revenue) || 0 };
     next.set(keyOf(v), cur);
     const old = prevCounts && prevCounts.get(keyOf(v));
     if (old && cur.orders > old.orders) {   // a drop = new day, not a sale
-      saleSound();
-      pulses.set(keyOf(v), { orders: cur.orders - old.orders, revenue: Math.round((cur.revenue - old.revenue) * 100) / 100, until: now + PULSE_MS });
+      const p = { orders: cur.orders - old.orders, revenue: Math.round((cur.revenue - old.revenue) * 100) / 100, until: now + PULSE_MS };
+      pulses.set(keyOf(v), p);
+      sold = true;
+      if (p.revenue / p.orders >= bigSale) big = true;   // per-order amount, what the customer paid
     }
   }
+  if (sold) saleSound(big);
   prevCounts = next;
   for (const [k, p] of pulses) if (p.until <= now) pulses.delete(k);
 }
@@ -458,13 +462,17 @@ $('grid').addEventListener('pointerdown', (e) => {
 });
 
 // ── Sale sound (per browser; browsers only allow sound after a click) ──
-// Uses the custom sound (sounds/sale-sound.mp3 on the server) if present, else a built-in two-note chime.
+// Two sounds from the server: sale-small.mp3 for a sale under $100 (bigSale)
+// and sale-big.mp3 for $100 or more; a missing file falls back to a built-in chime.
 const SOUND_KEY = 'fleet.sound';
 let soundOn = store.get(SOUND_KEY, false);
-let audioCtx = null, customSound = null, lastSoundAt = 0;
+let audioCtx = null, lastSoundAt = 0, bigSale = 100;
+const sounds = { small: null, big: null };
 function loadCustomSound() {
   fetch('/api/sale-sound').then(r => r.json()).then(j => {
-    if (j && j.custom) { customSound = new Audio('/api/sale-sound.mp3'); customSound.preload = 'auto'; }
+    if (!j) return;
+    if (Number(j.bigSale) > 0) bigSale = Number(j.bigSale);
+    for (const k of ['small', 'big']) if (j[k]) { sounds[k] = new Audio(`/api/sale-sound/${k}.mp3`); sounds[k].preload = 'auto'; }
   }).catch(() => {});
 }
 function chime() {
@@ -481,15 +489,17 @@ function chime() {
     o.start(t0 + at); o.stop(t0 + at + 0.65);
   });
 }
-function playSound() {
-  if (customSound) { customSound.currentTime = 0; customSound.play().catch(chime); }
+function playSound(big = false) {
+  const a = sounds[big ? 'big' : 'small'];
+  if (a) { a.currentTime = 0; a.play().catch(chime); }
   else chime();
 }
-// Several venues selling in one poll = one sound, not a pile-up.
-function saleSound() {
+// Several venues selling in one poll = one sound, not a pile-up; the big one
+// wins if any of those sales is $100 or more.
+function saleSound(big) {
   if (!soundOn || Date.now() - lastSoundAt < 1500) return;
   lastSoundAt = Date.now();
-  try { playSound(); } catch { /* no audio support */ }
+  try { playSound(big); } catch { /* no audio support */ }
 }
 function renderSoundBtn() {
   const b = $('sound-btn');
