@@ -231,7 +231,9 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 .hist-empty, .chart figcaption .muted { color: var(--muted); }
 .not-total { margin-left: auto; align-self: center; font-size: 0.7rem; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
 /* RustDesk note on each card */
-.rd { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.card-tools { position: relative; min-height: 39px; margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.last-sale { position: absolute; top: 8px; right: 0; font-size: 0.78rem; color: var(--muted); padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.last-sale b { color: var(--text); font-weight: 600; }
 .rd > summary { cursor: pointer; font-size: 0.78rem; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; }
 .rd > summary::-webkit-details-marker { display: none; }
 .rd[open] > summary { color: var(--text); border-color: var(--border-strong); }

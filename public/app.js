@@ -300,7 +300,10 @@ function card(v, sale) {
       </div>
 
       ${salesBlock(v)}
-      ${rustdeskBlock(v)}
+      <div class="card-tools">
+        ${rustdeskBlock(v)}
+        ${lastSaleChip(v)}
+      </div>
 
       <div class="card-foot">
         ${machinesRow(v)}
@@ -861,6 +864,32 @@ fetch('/api/rustdesk').then(r => r.ok ? r.json() : []).then(j => { rustdesk = Ar
 const rdFor = (v) => rustdesk.find(r => r && r.match && String(v.venue || '').toLowerCase().includes(String(r.match).toLowerCase()));
 const rdId = (id) => String(id).replace(/\s+/g, '');
 const rdShow = (id) => /^\d+$/.test(id) ? id.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : id;   // 461 541 652
+// Time since the venue's last sale. lastSaleAt is the venue's UTC time
+// ("YYYY-MM-DD HH:MM:SS"). Measured against the venue's own sentAt (same clock,
+// so a drifting venue PC can't skew it) plus how old the heartbeat is.
+function sinceLastSale(v) {
+  if (!v.lastSaleAt) return null;
+  const t = Date.parse(String(v.lastSaleAt).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(v.lastSaleAt) ? '' : 'Z'));
+  const sent = Date.parse(v.sentAt);
+  if (!Number.isFinite(t)) return null;
+  const ms = Number.isFinite(sent) ? (sent - t) + (Number(v.ageSec) || 0) * 1000 : Date.now() - t;
+  return Math.max(0, ms);
+}
+function agoShort(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${String(m % 60).padStart(2, '0')}m ago`;
+  return `${Math.floor(h / 24)}d ${h % 24}h ago`;
+}
+function lastSaleChip(v) {
+  if (viewDate) return '';                          // live only
+  const ms = sinceLastSale(v);
+  const when = v.lastSaleAt ? new Date(String(v.lastSaleAt).replace(' ', 'T') + 'Z').toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+  return `<span class="last-sale" title="${ms === null ? 'No sale reported' : 'Last sale ' + esc(when)}">Last sale <b>${ms === null ? '—' : esc(agoShort(ms))}</b></span>`;
+}
+
 function rustdeskBlock(v) {
   const r = rdFor(v);
   if (!r || !Array.isArray(r.machines) || !r.machines.length) return '';
