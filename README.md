@@ -45,25 +45,30 @@ no kiosks, a stale heartbeat, or an older venue build without `machines`
 **Photo → sale** = orders ÷ photos taken (today on the card, whole event on the
 event line).
 
-**What's selling** shows the product mix when a venue sends `today.sales` and/or
-`eventTotals.sales` (non-voided orders only; every part optional):
+**What's selling** reads `today.sales` (or the older `today.salesMix`) and
+`eventTotals.sales`, in the shape the venues send (EventPhotos 1.3.x):
 
 ```json
 {
-  "orders":   { "package": 14, "cart": 9, "packageWithExtras": 5 },
-  "packages": [{ "name": "Santa Deluxe", "orders": 8, "revenue": 440 }],
-  "prints":   [{ "size": "5x7", "qty": 12, "revenue": 180 }],
-  "digitals": { "qty": 9, "revenue": 135 },
-  "bundles":  { "qty": 0, "revenue": 0 },
-  "addons":   { "qty": 7, "revenue": 63 }
+  "orders":   { "total": 27, "packages": 8, "alaCarte": 19 },
+  "packages": [{ "name": "The Jingle", "count": 5 }],
+  "prints":   [{ "size": "5x7", "qty": 28 }],
+  "digitals": 10,
+  "addOns":   { "items": 5, "amount": 60 },
+  "packageOrdersWithExtras": 0
 }
 ```
 
-`package` = orders with a package, `cart` = à la carte only, `packageWithExtras`
-= package orders that also bought something extra. `prints` / `digitals` /
-`bundles` count à la carte lines only (not package slots). `addons` = lines
-sold below the product's full price (add-on / upsell copies). Venues without
-it show nothing.
+Packages with the same name are merged (event totals list one row per event
+or series). The board also accepts the original spec's names
+(`orders.package/cart`, `packages[].orders`, `digitals.qty`, `addons.qty/revenue`).
+Each card shows packages vs à la carte orders, which packages, à la carte
+items (print sizes + digitals) and upsells (`addOns`). The **What's selling**
+section shows the same for the fleet (Today or This event; follows the
+Showing date): fleet totals (minus `TOTALS_EXCLUDE` venues), packages vs à la
+carte per venue, upsells per venue, top packages and à la carte items. Colours:
+packages `#3987e5`, à la carte `#d95926`, upsells `#199e70` (validated on both
+dark surfaces).
 
 ## Endpoints
 

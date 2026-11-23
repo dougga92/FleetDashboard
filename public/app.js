@@ -91,54 +91,86 @@ function eventBlock(v) {
       </div>`;
 }
 
-// "What's selling": product mix a venue sends as today.sales / eventTotals.sales
-// (EventPhotos build with sales mix). Shape:
-//   { orders: { package, cart, packageWithExtras },
-//     packages: [{ name, orders, revenue }],        // package price × orders
-//     prints:   [{ size, qty, revenue }],           // à la carte print lines
-//     digitals: { qty, revenue }, bundles: { qty, revenue },
-//     addons:   { qty, revenue } }                  // lines sold below full price
-// Every part is optional; nothing renders for builds that don't send it.
+// "What's selling": product mix from today.sales (or the older salesMix) and
+// eventTotals.sales. Venues send this shape (EventPhotos 1.3.x):
+//   { orders: { total, packages, alaCarte }, packages: [{ name, count }],
+//     prints: [{ size, qty }], digitals: <qty>, addOns: { items, amount },
+//     packageOrdersWithExtras }
+// normSales() also reads the original dashboard spec (orders.package/cart,
+// packages[].orders, digitals.qty, addons.qty/revenue). Returns null if absent.
+function normSales(s) {
+  if (!s || typeof s !== 'object') return null;
+  const n = (x) => Math.max(0, Number(x) || 0);
+  const o = s.orders || {};
+  const merge = (rows, key, cnt) => {
+    const m = new Map();
+    for (const r of Array.isArray(rows) ? rows : []) {
+      if (!r) continue;
+      const k = String(r[key] || r.name || '?');
+      m.set(k, (m.get(k) || 0) + n(cnt(r)));
+    }
+    return [...m].map(([name, qty]) => ({ name, qty })).filter(r => r.qty > 0).sort((a, b) => b.qty - a.qty);
+  };
+  const up = s.addOns || s.addons || {};
+  const dg = s.digitals;
+  const pkg = n(o.packages ?? o.package), cart = n(o.alaCarte ?? o.cart);
+  return {
+    pkgOrders: pkg, cartOrders: cart, orders: n(o.total) || pkg + cart,
+    pkgWithExtras: n(s.packageOrdersWithExtras ?? o.packageWithExtras),
+    packages: merge(s.packages, 'name', r => r.count ?? r.orders),   // the same package can come from several events
+    prints: merge(s.prints, 'size', r => r.qty),
+    digitals: n(typeof dg === 'object' && dg ? dg.qty : dg),
+    bundles: n(s.bundles && typeof s.bundles === 'object' ? s.bundles.qty : s.bundles),
+    upItems: n(up.items ?? up.qty), upAmount: n(up.amount ?? up.revenue),
+  };
+}
+const salesOf = (t) => t ? normSales(t.sales || t.salesMix) : null;
 const MAX_MIX_ROWS = 4;
-function mixList(rows, nameOf) {
-  const list = (Array.isArray(rows) ? rows : []).filter(r => r && Number(r.qty ?? r.orders) > 0)
-    .sort((a, b) => (Number(b.qty ?? b.orders) || 0) - (Number(a.qty ?? a.orders) || 0));
-  const shown = list.slice(0, MAX_MIX_ROWS).map(r => `${esc(nameOf(r))} ×${num(r.qty ?? r.orders)}`);
-  if (list.length > MAX_MIX_ROWS) shown.push(`+${list.length - MAX_MIX_ROWS} more`);
+function mixList(rows) {
+  const shown = rows.slice(0, MAX_MIX_ROWS).map(r => `${esc(r.name)} ×${num(r.qty)}`);
+  if (rows.length > MAX_MIX_ROWS) shown.push(`+${rows.length - MAX_MIX_ROWS} more`);
   return shown.join(' · ');
 }
-function salesMix(s) {
-  if (!s || typeof s !== 'object') return '';
-  const o = s.orders || {};
-  const pkg = Number(o.package) || 0, cart = Number(o.cart) || 0, total = pkg + cart;
-  const rows = [];
-  if (total > 0) {
-    const pct = Math.round((pkg / total) * 100);
-    rows.push(`<div class="mix-split" title="${pkg} package orders, ${cart} à la carte">
-          <div class="mix-bar"><span class="mix-pkg" style="width:${pct}%"></span></div>
-          <div class="mix-legend"><span><i class="sw sw-pkg"></i>Packages ${pkg} (${pct}%)</span><span><i class="sw sw-cart"></i>À la carte ${cart} (${100 - pct}%)</span></div>
-        </div>`);
-  }
-  const line = (label, text) => text ? `<div class="mix-row"><span class="mix-k">${label}</span><span class="mix-v">${text}</span></div>` : '';
-  rows.push(line('Packages', mixList(s.packages, r => r.name || 'Package')));
-  rows.push(line('Prints', mixList(s.prints, r => r.size || 'Print')));
-  const qr = (x) => x && Number(x.qty) > 0 ? `×${num(x.qty)} · ${money(x.revenue)}` : '';
-  rows.push(line('Digitals', qr(s.digitals)));
-  rows.push(line('Bundles', qr(s.bundles)));
-  const ext = Number(o.packageWithExtras) || 0;
-  const addon = qr(s.addons);
-  rows.push(line('Add-ons', addon ? addon + (ext ? ` · on ${ext} package order${ext === 1 ? '' : 's'}` : '') : ''));
-  const body = rows.filter(Boolean).join('');
-  return body;
+// Two-part bar: package orders (blue) vs à la carte orders (orange), 2px gap, labelled.
+function splitBar(pkg, cart) {
+  const total = pkg + cart;
+  if (!total) return '';
+  const pct = Math.round((pkg / total) * 100);
+  return `<div class="mix-split" title="${pkg} package orders, ${cart} à la carte">
+          <div class="mix-bar">${pkg ? `<span class="mix-pkg" style="flex-grow:${pkg}"></span>` : ''}${cart ? `<span class="mix-cart" style="flex-grow:${cart}"></span>` : ''}</div>
+          <div class="mix-legend"><span><i class="sw sw-pkg"></i>Packages ${num(pkg)} (${pct}%)</span><span><i class="sw sw-cart"></i>À la carte ${num(cart)} (${100 - pct}%)</span></div>
+        </div>`;
+}
+function upsellText(m) {
+  if (!m.upItems && !m.upAmount) return 'none';
+  return `${num(m.upItems)} item${m.upItems === 1 ? '' : 's'} · ${money(m.upAmount).replace(/\.00$/, '')}` +
+    (m.pkgWithExtras ? ` · on ${num(m.pkgWithExtras)} package order${m.pkgWithExtras === 1 ? '' : 's'}` : '');
+}
+function cartText(m) {
+  const parts = m.prints.map(r => ({ name: r.name, qty: r.qty }));
+  if (m.digitals) parts.push({ name: 'Digital', qty: m.digitals });
+  if (m.bundles) parts.push({ name: 'Bundle', qty: m.bundles });
+  return mixList(parts);
+}
+function salesMix(raw) {
+  const m = normSales(raw);
+  if (!m) return '';
+  if (!m.orders) return '<div class="mix-row muted">No sales</div>';
+  const line = (cls, label, text) => text ? `<div class="mix-row"><span class="mix-k"><i class="sw ${cls}"></i>${label}</span><span class="mix-v">${text}</span></div>` : '';
+  return splitBar(m.pkgOrders, m.cartOrders) +
+    line('sw-pkg', 'Packages', mixList(m.packages)) +
+    line('sw-cart', 'À la carte', cartText(m)) +
+    line('sw-up', 'Upsells', upsellText(m));
 }
 function salesBlock(v) {
-  const today = salesMix(v.today && v.today.sales);
-  const ev = salesMix(v.eventTotals && v.eventTotals.sales);
+  const t = v.today || {}, e = v.eventTotals || {};
+  const today = salesMix(t.sales || t.salesMix);
+  const ev = salesMix(e.sales || e.salesMix);
   if (!today && !ev) return '';
   return `
       <div class="mix">
         <div class="mix-title">What's selling ${viewDate ? esc(dayName(viewDate)) : 'today'}</div>
-        ${today || `<div class="mix-row muted">${viewDate ? 'No sales' : 'No sales yet today'}</div>`}
+        ${today || '<div class="mix-row muted">Not reported</div>'}
         ${ev ? `<details class="mix-event"><summary>This event</summary>${ev}</details>` : ''}
       </div>`;
 }
@@ -609,7 +641,7 @@ const HIST_MEASURES = {
 function renderHistControls() {
   for (const b of document.querySelectorAll('[data-hm]')) b.setAttribute('aria-pressed', String(b.dataset.hm === histMeasure));
 }
-document.querySelector('.hist-controls').addEventListener('click', (e) => {
+document.querySelector('#history .hist-controls').addEventListener('click', (e) => {
   const b = e.target.closest('[data-hm]');
   if (!b) return;
   histMeasure = b.dataset.hm;
@@ -673,11 +705,111 @@ $('hist').addEventListener('pointerleave', hideTip);
 $('hist').addEventListener('focusin', (e) => { const c = e.target.closest('.col'); if (c) showTip(c); });
 $('hist').addEventListener('focusout', hideTip);
 
+// ── What's selling (fleet): packages vs à la carte, upsells, top items ──
+// Fleet totals leave out TOTALS_EXCLUDE venues (inTotals false); the per-venue
+// rows show everyone. Packages blue, à la carte orange, upsells aqua (validated).
+let sellScope = store.get('fleet.sellScope', 'today');
+function renderSellControls() {
+  for (const b of document.querySelectorAll('[data-ss]')) b.setAttribute('aria-pressed', String(b.dataset.ss === sellScope));
+}
+document.querySelector('#selling .hist-controls').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ss]');
+  if (!b) return;
+  sellScope = b.dataset.ss;
+  store.set('fleet.sellScope', sellScope);
+  renderSellControls();
+  renderSelling();
+});
+function renderSelling() {
+  const box = $('selling-body');
+  if (!box || !$('selling').open) return;
+  const ev = sellScope === 'event';
+  const period = ev ? 'this event' : (viewDate ? dayName(viewDate) : 'today');
+  const rows = (ev ? lastVenues : shownVenues()).map(v => ({ v, m: salesOf(ev ? v.eventTotals : v.today) }));
+  const have = rows.filter(r => r.m);
+  if (!have.length) { box.innerHTML = '<p class="hist-empty">No venue has sent its sales mix yet.</p>'; return; }
+  // Fleet totals (counted venues only)
+  const fleet = { pkg: 0, cart: 0, upItems: 0, upAmount: 0, pkgWithExtras: 0, packages: new Map(), items: new Map() };
+  const add = (map, k, q) => map.set(k, (map.get(k) || 0) + q);
+  for (const { v, m } of have) {
+    if (!counts(v)) continue;
+    fleet.pkg += m.pkgOrders; fleet.cart += m.cartOrders; fleet.upItems += m.upItems; fleet.upAmount += m.upAmount; fleet.pkgWithExtras += m.pkgWithExtras;
+    for (const r of m.packages) add(fleet.packages, r.name, r.qty);
+    for (const r of m.prints) add(fleet.items, r.name, r.qty);
+    if (m.digitals) add(fleet.items, 'Digital', m.digitals);
+    if (m.bundles) add(fleet.items, 'Bundle', m.bundles);
+  }
+  const total = fleet.pkg + fleet.cart;
+  const pct = (a) => total ? Math.round(a / total * 100) + '%' : '—';
+  const excl = lastVenues.filter(v => !counts(v)).map(shortName);
+  const exclNoteTxt = excl.length ? ` · excl. ${excl.join(', ')}` : '';
+  const stat = (cls, label, value, sub) => `<div class="sell-stat"><div class="tile-label"><i class="sw ${cls}"></i>${label}</div><div class="sell-val">${esc(value)}</div><div class="tile-sub">${esc(sub)}</div></div>`;
+  // Per-venue split rows
+  const venueRows = have.slice().sort((a, b) => (b.m.pkgOrders + b.m.cartOrders) - (a.m.pkgOrders + a.m.cartOrders) || byName(a.v, b.v));
+  const missing = rows.filter(r => !r.m).map(r => shortName(r.v));
+  const splitRow = ({ v, m }) => {
+    const t = m.pkgOrders + m.cartOrders;
+    const p = t ? Math.round(m.pkgOrders / t * 100) : 0;
+    const tip = `${esc(v.venue)} · ${esc(period)}<br>Packages: ${num(m.pkgOrders)} orders${m.packages.length ? ' (' + m.packages.map(r => esc(r.name) + ' ×' + num(r.qty)).join(', ') + ')' : ''}<br>À la carte: ${num(m.cartOrders)} orders${cartText(m) ? ' (' + cartText(m) + ')' : ''}<br>Upsells: ${esc(upsellText(m))}${counts(v) ? '' : '<br>Not in fleet totals'}`;
+    return `<li class="bar-row" tabindex="0" data-tip="${esc(tip)}">
+            <span class="bar-name">${esc(shortName(v))}</span>
+            <span class="stack">${t ? `${m.pkgOrders ? `<span class="mix-pkg" style="flex-grow:${m.pkgOrders}"></span>` : ''}${m.cartOrders ? `<span class="mix-cart" style="flex-grow:${m.cartOrders}"></span>` : ''}` : ''}</span>
+            <span class="bar-val">${t ? `${p}% pkg` : 'no sales'}</span>
+          </li>`;
+  };
+  const rankBars = (list, cls, fmt, tipOf) => {
+    const max = Math.max(0, ...list.map(r => r.n));
+    return list.map(r => `<li class="bar-row" tabindex="0" data-tip="${esc(tipOf(r))}">
+            <span class="bar-name">${esc(r.name)}</span>
+            <span class="bar-track"><span class="bar ${cls}" style="width:${max > 0 && r.n > 0 ? Math.max(1.5, r.n / max * 100) : 0}%"></span></span>
+            <span class="bar-val">${esc(fmt(r))}</span>
+          </li>`).join('');
+  };
+  const upRows = have.map(({ v, m }) => ({ name: shortName(v), n: m.upAmount, items: m.upItems, ex: m.pkgWithExtras, v }))
+    .sort((a, b) => b.n - a.n || b.items - a.items || a.name.localeCompare(b.name));
+  const topPk = [...fleet.packages].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n);
+  const topIt = [...fleet.items].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n);
+  box.innerHTML = `
+    <div class="sell-stats">
+      ${stat('sw-pkg', 'Package orders', num(fleet.pkg), `${pct(fleet.pkg)} of ${num(total)} orders`)}
+      ${stat('sw-cart', 'À la carte orders', num(fleet.cart), `${pct(fleet.cart)} of orders`)}
+      ${stat('sw-up', 'Upsells', money(fleet.upAmount).replace(/\.00$/, ''), `${num(fleet.upItems)} item${fleet.upItems === 1 ? '' : 's'}${fleet.pkgWithExtras ? ` · ${num(fleet.pkgWithExtras)} package orders added extras` : ''}`)}
+    </div>
+    <p class="sell-note">Fleet totals, ${esc(period)}${esc(exclNoteTxt)}${missing.length ? ` · not reporting: ${esc(missing.join(', '))}` : ''}</p>
+    <div class="charts">
+      <figure class="chart">
+        <figcaption>Packages vs à la carte (orders)</figcaption>
+        <div class="mix-legend chart-legend"><span><i class="sw sw-pkg"></i>Packages</span><span><i class="sw sw-cart"></i>À la carte</span></div>
+        <ol class="bars">${venueRows.map(splitRow).join('')}</ol>
+      </figure>
+      <figure class="chart">
+        <figcaption>Upsells by venue</figcaption>
+        <ol class="bars">${rankBars(upRows, 'bar-up', r => r.n || r.items ? `${money(r.n).replace(/\.00$/, '')} · ${num(r.items)}` : '—',
+          r => `${esc(r.v.venue)} · ${esc(period)}<br>Upsells: ${num(r.items)} items · ${money(r.n)}${r.ex ? `<br>${num(r.ex)} package orders added extras` : ''}`)}</ol>
+      </figure>
+      <figure class="chart">
+        <figcaption>Top packages (fleet)</figcaption>
+        <ol class="bars">${topPk.length ? rankBars(topPk, 'bar-pkg', r => num(r.n), r => `${esc(r.name)}: ${num(r.n)} sold, ${esc(period)}`) : '<li class="bar-row muted">No packages sold</li>'}</ol>
+      </figure>
+      <figure class="chart">
+        <figcaption>À la carte items (fleet)</figcaption>
+        <ol class="bars">${topIt.length ? rankBars(topIt, 'bar-cart', r => num(r.n), r => `${esc(r.name)}: ${num(r.n)} sold à la carte, ${esc(period)}`) : '<li class="bar-row muted">No à la carte items</li>'}</ol>
+      </figure>
+    </div>`;
+}
+$('selling').open = store.get('fleet.selling', window.innerWidth >= 700);
+$('selling').addEventListener('toggle', () => { store.set('fleet.selling', $('selling').open); renderSelling(); });
+$('selling-body').addEventListener('pointerover', (e) => { const row = e.target.closest('.bar-row[data-tip]'); if (row) showTip(row); });
+$('selling-body').addEventListener('pointerleave', hideTip);
+$('selling-body').addEventListener('focusin', (e) => { const row = e.target.closest('.bar-row[data-tip]'); if (row) showTip(row); });
+$('selling-body').addEventListener('focusout', hideTip);
+
 function renderView() {
   renderDaySelect();
   if (lastSummary) renderSummary(lastSummary);
   if (!dragging) renderGrid();
   renderCharts(shownVenues());
+  renderSelling();
   renderHistory();
   $('empty').hidden = lastVenues.length > 0;
 }
@@ -713,6 +845,7 @@ $('grid').addEventListener('click', (e) => {
 
 renderSortBar();
 renderHistControls();
+renderSellControls();
 $('history').open = store.get('fleet.history', window.innerWidth >= 700);
 tick();
 setInterval(tick, POLL_MS);
