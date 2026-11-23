@@ -257,5 +257,9 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 .bar.bar-up { background: var(--mix-up); } .bar.bar-pkg { background: var(--mix-pkg); } .bar.bar-cart { background: var(--mix-cart); }
 .bar-row.muted { color: var(--muted); font-size: 0.85rem; }
 
-/* Tax line under the card's before-tax revenue */
-.tax-line { color: var(--muted); font-size: 0.8rem; margin: -4px 0 8px; font-variant-numeric: tabular-nums; }
+/* Sales (no tax) and tax as two separate figures */
+.card-money { flex-wrap: wrap; gap: 6px 24px; }
+.money-pair { display: flex; flex-direction: column; gap: 4px; }
+.tax-money { font-size: 2rem; font-weight: 800; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
+.event-meta { flex-basis: 100%; }

@@ -47,11 +47,11 @@ function taxOf(rec, v) {
 // True revenue (before tax) for a today/event/day record; gross if tax unknown.
 const netOf = (rec, v) => { const g = Number(rec && rec.revenue) || 0, t = taxOf(rec, v); return t === null ? g : g - t; };
 const rateText = (v) => v.taxRate != null && Number.isFinite(Number(v.taxRate)) ? ` (${Number(v.taxRate)}%)` : '';
-// Small line under a before-tax figure: what customers paid and the tax in it.
-function taxLine(rec, v) {
+// Tax as its own figure ("—" until the venue reports its rate).
+const taxMoney = (rec, v) => { const t = taxOf(rec, v); return t === null ? '—' : money(t); };
+function taxLine(rec, v) {   // tooltip text
   const t = taxOf(rec, v);
-  if (t === null) return 'incl. tax · venue update needed to split it out';
-  return `${money(rec.revenue)} paid · ${money(t)} tax${rateText(v)}`;
+  return t === null ? 'Tax: not reported yet (sales include tax)' : `Sales ${money(netOf(rec, v))} · tax ${money(t)}${rateText(v)}`;
 }
 const taxMissNote = (names) => names && names.length ? ' · tax still in: ' + names.map(n => String(n).split(' - ')[0]).join(', ') : '';
 
@@ -89,11 +89,13 @@ function renderSummary(s) {
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
     { label: 'All events to date', value: money(s.eventNet ?? s.eventRevenue), cls: '',
-      sub: `${money(s.eventTax)} tax taken out · ${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
+      sub: `sales, no tax · ${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
     { label: 'Avg per order', value: avgText(s.eventNet ?? s.eventRevenue, s.eventOrders), cls: '',
       sub: `all events · today ${avgText(s.todayNet ?? s.todayRevenue, s.todayOrders)}` },
-    { label: "Today's revenue", value: money(s.todayNet ?? s.todayRevenue), cls: '',
-      sub: `${money(s.todayTax)} tax taken out · ${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
+    { label: "Today's sales", value: money(s.todayNet ?? s.todayRevenue), cls: '',
+      sub: `no tax · ${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
+    { label: 'Tax today', value: money(s.todayTax), cls: '',
+      sub: `all events ${money(s.eventTax)}${exclNote(s.excluded)}` },
     { label: 'Emails sent today (fleet)', value: num(s.todayEmails), cls: '',
       sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
     { label: 'ACS hourly cap', value: `${num(s.acsHour)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
@@ -113,8 +115,9 @@ function eventBlock(v) {
   const since = e.since ? ' since ' + new Date(e.since + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
   return `
       <div class="event-total">
-        <span class="event-money">${money(netOf(e, v))}</span>
-        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(netOf(e, v), e.orders)} · ${saleRate(e.orders, e.photos)} photo→sale${taxOf(e, v) === null ? '' : ' · ' + money(taxOf(e, v)) + ' tax'}</span>
+        <span class="nowrap"><span class="event-money">${money(netOf(e, v))}</span> <span class="money-label">sales</span></span>
+        <span class="nowrap"><span class="event-money">${taxMoney(e, v)}</span> <span class="money-label">tax</span></span>
+        <span class="money-label event-meta">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(netOf(e, v), e.orders)} · ${saleRate(e.orders, e.photos)} photo→sale</span>
       </div>`;
 }
 
@@ -275,11 +278,16 @@ function card(v, sale) {
       </div>
 
       <div class="card-money">
-        <span class="money">${money(netOf(t, v))}</span>
-        <span class="money-label">${viewDate ? esc(dayName(viewDate)) : 'today'}${taxOf(t, v) === null ? '' : ' · before tax'}</span>
+        <div class="money-pair">
+          <span class="money">${money(netOf(t, v))}</span>
+          <span class="money-label">sales ${viewDate ? esc(dayName(viewDate)) : 'today'}${taxOf(t, v) === null ? ' · incl. tax' : ''}</span>
+        </div>
+        <div class="money-pair tax-pair" title="${taxOf(t, v) === null ? 'Needs the venue update that sends its tax rate' : 'Sales tax collected'}">
+          <span class="tax-money">${taxMoney(t, v)}</span>
+          <span class="money-label">tax${taxOf(t, v) === null ? ' · update venue' : esc(rateText(v))}</span>
+        </div>
         ${counts(v) ? '' : '<span class="not-total" title="Toy-donation prints and digitals: left out of the fleet totals">not in fleet totals</span>'}
       </div>
-      <div class="tax-line">${esc(taxLine(t, v))}</div>
 
       ${eventBlock(v)}
 
@@ -627,7 +635,8 @@ function renderDaySummary(all) {
   const active = all.filter(v => (Number(v.today.orders) || 0) + (Number(v.today.photos) || 0) > 0).length;
   renderTiles([
     { label: dayName(viewDate), value: `${active} venue${active === 1 ? '' : 's'}`, cls: '', sub: 'with photos or sales' },
-    { label: 'Revenue', value: money(net), cls: '', sub: `${money(revenue - net)} tax taken out · ${num(orders)} order${orders === 1 ? '' : 's'}${exclNote(excluded)}${taxMissNote(missing)}` },
+    { label: 'Sales', value: money(net), cls: '', sub: `no tax · ${num(orders)} order${orders === 1 ? '' : 's'}${exclNote(excluded)}${taxMissNote(missing)}` },
+    { label: 'Tax', value: money(revenue - net), cls: '', sub: dayName(viewDate) + exclNote(excluded) },
     { label: 'Avg per order', value: avgText(net, orders), cls: '', sub: dayName(viewDate) },
     { label: 'Photos', value: num(photos), cls: '', sub: `${saleRate(orders, photos)} photo→sale` },
     { label: 'Emails sent', value: num(emails), cls: '', sub: `${num(acs)} via ACS` },
