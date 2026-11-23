@@ -70,6 +70,21 @@ carte per venue, upsells per venue, top packages and à la carte items. Colours:
 packages `#3987e5`, à la carte `#d95926`, upsells `#199e70` (validated on both
 dark surfaces).
 
+## Sales tax (true revenue)
+
+Venue prices **include** sales tax, so `revenue` is what customers paid. The
+board shows revenue **before tax** everywhere money appears (tiles, cards, event
+line, avg order, Compare, Night by night, sort by $); each card has a small line
+with what was paid and the tax in it. Venues send:
+
+- `taxRate` (top level, percent, e.g. `7` or `8.25`): the venue's own rate;
+- `tax` (optional) next to each `revenue` in `today`, `eventTotals` and each `days[]` row: the actual tax dollars.
+
+The board uses `tax` when present, else backs it out of the rate:
+`tax = revenue − revenue ÷ (1 + rate/100)`. A venue that sends neither shows
+with tax still in, and the fleet tiles name it ("tax still in: …").
+`/api/fleet` summary adds `todayTax`, `todayNet`, `eventTax`, `eventNet`, `taxMissing`.
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |

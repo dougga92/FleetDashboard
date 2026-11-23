@@ -29,6 +29,32 @@ function avgText(revenue, orders, whole = false) {
 
 const num = (n) => (Number(n) || 0).toLocaleString();
 
+// Sales tax. Venue prices INCLUDE tax, so `revenue` is what customers paid. The
+// board shows true revenue = revenue − tax. A venue sends its rate as top-level
+// `taxRate` (percent) and, when it can, the tax dollars as `tax` beside each
+// `revenue`. Prefer `tax`; else back it out of the rate. null = not reported
+// yet (that venue then shows, and counts, with tax in). Same rule as server.js.
+function taxOf(rec, v) {
+  if (!rec) return null;
+  if (rec.tax != null && Number.isFinite(Number(rec.tax))) return Number(rec.tax);
+  const rate = Number(v && v.taxRate);
+  if (v && v.taxRate != null && Number.isFinite(rate) && rate >= 0) {
+    const gross = Number(rec.revenue) || 0;
+    return gross - gross / (1 + rate / 100);
+  }
+  return null;
+}
+// True revenue (before tax) for a today/event/day record; gross if tax unknown.
+const netOf = (rec, v) => { const g = Number(rec && rec.revenue) || 0, t = taxOf(rec, v); return t === null ? g : g - t; };
+const rateText = (v) => v.taxRate != null && Number.isFinite(Number(v.taxRate)) ? ` (${Number(v.taxRate)}%)` : '';
+// Small line under a before-tax figure: what customers paid and the tax in it.
+function taxLine(rec, v) {
+  const t = taxOf(rec, v);
+  if (t === null) return 'incl. tax · venue update needed to split it out';
+  return `${money(rec.revenue)} paid · ${money(t)} tax${rateText(v)}`;
+}
+const taxMissNote = (names) => names && names.length ? ' · tax still in: ' + names.map(n => String(n).split(' - ')[0]).join(', ') : '';
+
 // AJ's photo-to-sale ratio: orders ÷ photos taken, as a percent ("—" with no photos).
 function saleRate(orders, photos) {
   const o = Number(orders) || 0, p = Number(photos) || 0;
@@ -62,11 +88,12 @@ function renderSummary(s) {
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
-    { label: 'All events to date', value: money(s.eventRevenue), cls: '',
-      sub: `${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}${exclNote(s.excluded)}` },
-    { label: 'Avg per order', value: avgText(s.eventRevenue, s.eventOrders), cls: '',
-      sub: `all events · today ${avgText(s.todayRevenue, s.todayOrders)}` },
-    { label: "Today's revenue", value: money(s.todayRevenue), cls: '', sub: `${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}${exclNote(s.excluded)}` },
+    { label: 'All events to date', value: money(s.eventNet ?? s.eventRevenue), cls: '',
+      sub: `${money(s.eventTax)} tax taken out · ${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
+    { label: 'Avg per order', value: avgText(s.eventNet ?? s.eventRevenue, s.eventOrders), cls: '',
+      sub: `all events · today ${avgText(s.todayNet ?? s.todayRevenue, s.todayOrders)}` },
+    { label: "Today's revenue", value: money(s.todayNet ?? s.todayRevenue), cls: '',
+      sub: `${money(s.todayTax)} tax taken out · ${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
     { label: 'Emails sent today (fleet)', value: num(s.todayEmails), cls: '',
       sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
     { label: 'ACS hourly cap', value: `${num(s.acsHour)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
@@ -86,8 +113,8 @@ function eventBlock(v) {
   const since = e.since ? ' since ' + new Date(e.since + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
   return `
       <div class="event-total">
-        <span class="event-money">${money(e.revenue)}</span>
-        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(e.revenue, e.orders)} · ${saleRate(e.orders, e.photos)} photo→sale</span>
+        <span class="event-money">${money(netOf(e, v))}</span>
+        <span class="money-label">this event${esc(since)} · ${e.orders || 0} order${e.orders === 1 ? '' : 's'} · avg ${avgText(netOf(e, v), e.orders)} · ${saleRate(e.orders, e.photos)} photo→sale${taxOf(e, v) === null ? '' : ' · ' + money(taxOf(e, v)) + ' tax'}</span>
       </div>`;
 }
 
@@ -248,16 +275,17 @@ function card(v, sale) {
       </div>
 
       <div class="card-money">
-        <span class="money">${money(t.revenue)}</span>
-        <span class="money-label">${viewDate ? esc(dayName(viewDate)) : 'today'}</span>
+        <span class="money">${money(netOf(t, v))}</span>
+        <span class="money-label">${viewDate ? esc(dayName(viewDate)) : 'today'}${taxOf(t, v) === null ? '' : ' · before tax'}</span>
         ${counts(v) ? '' : '<span class="not-total" title="Toy-donation prints and digitals: left out of the fleet totals">not in fleet totals</span>'}
       </div>
+      <div class="tax-line">${esc(taxLine(t, v))}</div>
 
       ${eventBlock(v)}
 
       <div class="metrics">
         <div class="metric"><div class="metric-value">${t.orders || 0}</div><div class="metric-label">Orders</div></div>
-        <div class="metric"><div class="metric-value">${avgText(t.revenue, t.orders, true)}</div><div class="metric-label">Avg order</div></div>
+        <div class="metric"><div class="metric-value">${avgText(netOf(t, v), t.orders, true)}</div><div class="metric-label">Avg order</div></div>
         <div class="metric"><div class="metric-value">${t.photos || 0}</div><div class="metric-label">Photos</div></div>
         <div class="metric"><div class="metric-value">${num(t.emails)}</div><div class="metric-label">Emails</div></div>
         <div class="metric metric-wide"><div class="metric-value">${saleRate(t.orders, t.photos)}</div><div class="metric-label">Photo → sale (orders ÷ photos)</div></div>
@@ -306,7 +334,7 @@ let customOrder = store.get(ORDER_KEY, []);
 let lastVenues = [];
 let dragging = null;
 
-const rev = (v) => Number(v.today && v.today.revenue) || 0;
+const rev = (v) => netOf(v.today, v);   // before tax
 const byName = (a, b) => String(a.venue || '').localeCompare(String(b.venue || ''), undefined, { sensitivity: 'base' });
 function sorted(venues) {
   const list = venues.slice();
@@ -475,20 +503,21 @@ renderSoundBtn();
 // One hue for every bar (one series per chart; colour never encodes rank).
 // Values are labelled at the bar end; hover/tap a row for the full detail.
 const shortName = (v) => String(v.venue || 'Unknown').split(' - ')[0].trim();
-const evAvg = (v) => { const e = v.eventTotals; return e && Number(e.orders) > 0 ? Number(e.revenue) / Number(e.orders) : null; };
+const evAvg = (v) => { const e = v.eventTotals; return e && Number(e.orders) > 0 ? netOf(e, v) / Number(e.orders) : null; };
 const CHARTS = [
-  { title: () => viewDate ? 'Revenue ' + dayName(viewDate) : "Today's revenue", val: v => rev(v), fmt: n => money(n).replace(/\.00$/, '') },
+  { title: () => (viewDate ? 'Revenue ' + dayName(viewDate) : "Today's revenue") + ' (before tax)', val: v => rev(v), fmt: n => money(n).replace(/\.00$/, '') },
   { title: () => viewDate ? 'Orders ' + dayName(viewDate) : 'Orders today', val: v => Number(v.today && v.today.orders) || 0, fmt: n => num(n) },
   { title: () => 'Photo → sale ' + (viewDate ? dayName(viewDate) : 'today'), val: v => { const t = v.today || {}; return Number(t.photos) > 0 ? (Number(t.orders) || 0) / Number(t.photos) * 100 : null; }, fmt: n => n.toFixed(1) + '%' },
-  { title: 'This event revenue', val: v => v.eventTotals ? Number(v.eventTotals.revenue) || 0 : null, fmt: n => money(n).replace(/\.00$/, '') },
+  { title: 'This event revenue (before tax)', val: v => v.eventTotals ? netOf(v.eventTotals, v) : null, fmt: n => money(n).replace(/\.00$/, '') },
   { title: 'Avg order, this event', val: evAvg, fmt: n => money(n) },
 ];
 function tipFor(v) {
   const t = v.today || {}, e = v.eventTotals;
   return [
     esc(v.venue || 'Unknown venue') + (v.online ? '' : ' (offline)') + (counts(v) ? '' : ' · not in fleet totals'),
-    `${viewDate ? esc(dayName(viewDate)) : 'Today'}: ${money(t.revenue)} · ${num(t.orders)} orders · ${saleRate(t.orders, t.photos)} photo→sale`,
-    e ? `This event: ${money(e.revenue)} · ${num(e.orders)} orders · avg ${avgText(e.revenue, e.orders)}` : 'This event: not reported',
+    `${viewDate ? esc(dayName(viewDate)) : 'Today'}: ${money(netOf(t, v))} · ${num(t.orders)} orders · ${saleRate(t.orders, t.photos)} photo→sale`,
+    esc(taxLine(t, v)),
+    e ? `This event: ${money(netOf(e, v))} · ${num(e.orders)} orders · avg ${avgText(netOf(e, v), e.orders)}` : 'This event: not reported',
   ].join('<br>');
 }
 function renderCharts(venues) {
@@ -591,13 +620,15 @@ function renderDaySummary(all) {
   const excluded = all.filter(v => !counts(v)).map(v => v.venue);
   const sumOf = (f) => list.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);
   const revenue = Math.round(sumOf(t => t.revenue) * 100) / 100, orders = sumOf(t => t.orders);
+  const net = Math.round(list.reduce((s, v) => s + netOf(v.today, v), 0) * 100) / 100;
+  const missing = list.filter(v => taxOf(v.today, v) === null).map(v => v.venue);
   const sumAll = (f) => all.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);   // emails: every venue uses the real ACS quota
   const photos = sumOf(t => t.photos), emails = sumAll(t => t.emails), acs = sumAll(t => t.emailsAcs);
   const active = all.filter(v => (Number(v.today.orders) || 0) + (Number(v.today.photos) || 0) > 0).length;
   renderTiles([
     { label: dayName(viewDate), value: `${active} venue${active === 1 ? '' : 's'}`, cls: '', sub: 'with photos or sales' },
-    { label: 'Revenue', value: money(revenue), cls: '', sub: `${num(orders)} order${orders === 1 ? '' : 's'}${exclNote(excluded)}` },
-    { label: 'Avg per order', value: avgText(revenue, orders), cls: '', sub: dayName(viewDate) },
+    { label: 'Revenue', value: money(net), cls: '', sub: `${money(revenue - net)} tax taken out · ${num(orders)} order${orders === 1 ? '' : 's'}${exclNote(excluded)}${taxMissNote(missing)}` },
+    { label: 'Avg per order', value: avgText(net, orders), cls: '', sub: dayName(viewDate) },
     { label: 'Photos', value: num(photos), cls: '', sub: `${saleRate(orders, photos)} photo→sale` },
     { label: 'Emails sent', value: num(emails), cls: '', sub: `${num(acs)} via ACS` },
   ]);
@@ -634,7 +665,7 @@ $('day-next').addEventListener('click', () => { const w = [''].concat(pastDates(
 // One hue throughout; the selected date gets a ring. Tap a column to open that date.
 const HIST_DAYS = 21;
 const HIST_MEASURES = {
-  revenue: { label: 'Revenue', fmt: n => money(n).replace(/\.00$/, '') },
+  revenue: { label: 'Revenue (before tax)', fmt: n => money(n).replace(/\.00$/, '') },
   orders:  { label: 'Orders',  fmt: n => num(n) },
   photos:  { label: 'Photos',  fmt: n => num(n) },
 };
@@ -667,7 +698,7 @@ function renderHistory() {
   }
   const m = HIST_MEASURES[histMeasure];
   const dates = allDates().slice(-HIST_DAYS);
-  const val = (v, d) => { const r = recordFor(v, d); return r ? Number(r[histMeasure]) || 0 : 0; };
+  const val = (v, d) => { const r = recordFor(v, d); return !r ? 0 : histMeasure === 'revenue' ? netOf(r, v) : Number(r[histMeasure]) || 0; };
   const fleetVal = (d) => lastVenues.filter(counts).reduce((s, v) => s + val(v, d), 0);
   const excl = lastVenues.filter(v => !counts(v)).map(shortName);
   const fleetMax = Math.max(0, ...dates.map(fleetVal));
@@ -679,7 +710,7 @@ function renderHistory() {
   };
   const venueTip = (v) => (d, n) => {
     const r = recordFor(v, d) || {};
-    return `<b>${esc(shortName(v))} · ${esc(dayName(d))}</b><br>${money(r.revenue)} · ${num(r.orders)} orders · ${num(r.photos)} photos` + (r.event ? `<br>${esc(r.event)}` : '');
+    return `<b>${esc(shortName(v))} · ${esc(dayName(d))}</b><br>${money(netOf(r, v))} before tax · ${num(r.orders)} orders · ${num(r.photos)} photos` + (r.event ? `<br>${esc(r.event)}` : '');
   };
   const total = (v) => dates.reduce((s, d) => s + val(v, d), 0);
   box.innerHTML = `

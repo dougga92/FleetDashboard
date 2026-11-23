@@ -39,6 +39,24 @@ const STARTED_AT = Date.now();
 const TOTALS_EXCLUDE = (process.env.TOTALS_EXCLUDE ?? 'Waltz Photo').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const inTotals = (v) => !TOTALS_EXCLUDE.some(x => String(v.venue || '').toLowerCase().includes(x));
 
+// Sales tax. Venue prices INCLUDE tax (Doug), so `revenue` is what customers paid.
+// A venue sends its own rate as top-level `taxRate` (percent, e.g. 7 or 8.25) and,
+// when it can, the actual tax dollars as `tax` next to each `revenue` (today,
+// eventTotals, days[]). Prefer `tax`; else back it out of the rate:
+// tax = revenue − revenue ÷ (1 + rate/100). null = this venue doesn't report tax yet.
+// Same rule as taxOf() in public/app.js.
+function taxOf(rec, v) {
+  if (!rec) return null;
+  if (rec.tax != null && Number.isFinite(Number(rec.tax))) return Number(rec.tax);
+  const rate = Number(v && v.taxRate);
+  if (v && v.taxRate != null && Number.isFinite(rate) && rate >= 0) {
+    const gross = Number(rec.revenue) || 0;
+    return gross - gross / (1 + rate / 100);
+  }
+  return null;
+}
+const round2 = (n) => Math.round(n * 100) / 100;
+
 // Latest heartbeat per venue, keyed by machineId (stable per box) then venue name.
 const fleet = new Map();
 const venueKey = (p) => p.machineId || p.venue || 'unknown';
@@ -135,16 +153,26 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const acsLevel = acsPct >= 90 ? 'bad' : acsPct >= 70 ? 'warn' : 'ok';
   // Less than an hour since a restart: the window only goes back to the restart.
   const acsSince = now - STARTED_AT < HOUR_MS ? new Date(STARTED_AT).toISOString() : null;
+  // Fleet tax: venues that don't report tax yet count with tax in (listed in taxMissing).
+  const taxSum = (pick, list) => round2(list.reduce((t, v) => t + (taxOf(pick(v), v) || 0), 0));
+  const todayTax = taxSum(v => v.today, counted), eventTax = taxSum(v => v.eventTotals, withEvent);
+  const todayRevenue = round2(sum(v => v.today && v.today.revenue, counted));
+  const eventRevenue = round2(sum(v => v.eventTotals.revenue, withEvent));
   res.json({
     venues,
     summary: {
       total:        venues.length,
       online:       venues.filter(v => v.online).length,
       offline:      venues.filter(v => !v.online).length,
-      todayRevenue: Math.round(sum(v => v.today && v.today.revenue, counted) * 100) / 100,
+      todayRevenue,                                   // what customers paid (tax included)
+      todayTax,
+      todayNet:     round2(todayRevenue - todayTax),  // true revenue, before tax
       todayOrders:  sum(v => v.today && v.today.orders, counted),
       excluded:     venues.filter(v => !v.inTotals).map(v => v.venue),
-      eventRevenue:  Math.round(sum(v => v.eventTotals.revenue, withEvent) * 100) / 100,
+      eventRevenue,
+      eventTax,
+      eventNet:      round2(eventRevenue - eventTax),
+      taxMissing:    counted.filter(v => taxOf(v.today, v) === null).map(v => v.venue),
       eventOrders:   sum(v => v.eventTotals.orders, withEvent),
       eventVenues:   withEvent.length,
       todayEmails,

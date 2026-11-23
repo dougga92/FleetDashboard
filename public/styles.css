@@ -256,3 +256,6 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 .stack .mix-pkg, .stack .mix-cart { border-radius: 4px; }
 .bar.bar-up { background: var(--mix-up); } .bar.bar-pkg { background: var(--mix-pkg); } .bar.bar-cart { background: var(--mix-cart); }
 .bar-row.muted { color: var(--muted); font-size: 0.85rem; }
+
+/* Tax line under the card's before-tax revenue */
+.tax-line { color: var(--muted); font-size: 0.8rem; margin: -4px 0 8px; font-variant-numeric: tabular-nums; }
