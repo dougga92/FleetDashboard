@@ -31,7 +31,7 @@ const cfg = {
   repeatMs:   num(env.REPEAT_MIN, 60) * 60e3,
   maxRepeats: Number.isFinite(Number(env.REPEAT_MAX)) && env.REPEAT_MAX !== '' ? Number(env.REPEAT_MAX) : 3,   // then quiet until it clears
   clearMs:    num(env.CLEAR_AFTER_MIN, 5) * 60e3,
-  hours:      parseHours(env.ALERT_HOURS || '16-24'),                 // local venue hours, start-end (24 = midnight)
+  hours:      parseHours(env.ALERT_HOURS || '17-22'),                 // local venue hours, start-end (24 = midnight)
   defaultTz:  env.ALERT_DEFAULT_TZ || 'America/New_York',
   // Venue time zones: "match=Zone" pairs, matched on part of the venue name.
   tz: parsePairs(env.VENUE_TZ || 'georgia=America/New_York,alabama=America/Chicago,california=America/Los_Angeles,' +
@@ -41,7 +41,7 @@ const enabled = () => !!(cfg.sid && cfg.token && cfg.from && cfg.to.length);
 
 function parseHours(s) {
   const m = String(s).match(/^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/);
-  if (!m) return { start: 16, end: 24 };
+  if (!m) return { start: 17, end: 22 };
   return { start: Math.min(24, +m[1]), end: Math.min(24, +m[2]) };
 }
 function parsePairs(s) {

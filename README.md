@@ -103,7 +103,7 @@ One incident per venue + alert key: one text when it starts, a reminder at most
 every `REPEAT_MIN` (60) up to `REPEAT_MAX` (3), and an all-clear once it has been
 gone `CLEAR_AFTER_MIN` (5), so flapping isn't spammy. Everything found in one
 check is one text; every line starts with the venue name. Texts go out only
-within `ALERT_HOURS` (default `16-24`, i.e. 4 pm to midnight) in **each venue's
+within `ALERT_HOURS` (default `17-22`, i.e. 5 pm to 10 pm, Doug 2026-11-23) in **each venue's
 local time** (`VENUE_TZ`, "name part=IANA zone" pairs; defaults cover the current
 venues); outside it trouble only shows on the board. The board's Alerts tile has
 a **Send test text** button once Twilio is set.
