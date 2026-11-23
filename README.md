@@ -85,6 +85,41 @@ The board uses `tax` when present, else backs it out of the rate:
 with tax still in, and the fleet tiles name it ("tax still in: …").
 `/api/fleet` summary adds `todayTax`, `todayNet`, `eventTax`, `eventNet`, `taxMissing`.
 
+## Alerts and texts
+
+Venues on EventPhotos 1.3.43+ send `alerts: [{ key, severity: "warn"|"critical",
+message, since }]` while something is wrong (absent = healthy). Each card's pill
+reads Online (green), Warning (amber), Critical (red) or Offline, with the
+messages and how long underneath. A venue with no heartbeat for `DARK_AFTER_MIN`
+counts as a critical "offline" alert (its own stale alerts are ignored). The
+**Alerts** tile counts them.
+
+`notifier.js` texts the on-call numbers through Twilio:
+
+- a venue's **critical** alert (warnings only if `ALERT_TEXT_WARN=true`), and
+- a venue going **dark** (no heartbeat for 6 min).
+
+One incident per venue + alert key: one text when it starts, a reminder at most
+every `REPEAT_MIN` (60) up to `REPEAT_MAX` (3), and an all-clear once it has been
+gone `CLEAR_AFTER_MIN` (5), so flapping isn't spammy. Everything found in one
+check is one text; every line starts with the venue name. Texts go out only
+within `ALERT_HOURS` (default `16-24`, i.e. 4 pm to midnight) in **each venue's
+local time** (`VENUE_TZ`, "name part=IANA zone" pairs; defaults cover the current
+venues); outside it trouble only shows on the board. The board's Alerts tile has
+a **Send test text** button once Twilio is set.
+
+| App setting | |
+|---|---|
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Twilio account |
+| `TWILIO_FROM` | Twilio number, `+1XXXXXXXXXX` |
+| `ALERT_TO` | on-call numbers, comma-separated, `+1XXXXXXXXXX` |
+| `ALERT_HOURS`, `VENUE_TZ`, `ALERT_TEXT_WARN`, `DARK_AFTER_MIN`, `REPEAT_MIN`, `REPEAT_MAX`, `CLEAR_AFTER_MIN` | optional |
+
+Limits: state is in memory, so after a restart a venue that was already dark is
+unknown until it reports again. On the Free plan the app stays awake only while
+venues post heartbeats; if every venue went dark at once, nothing would text
+(B1 + Always On fixes that).
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |
@@ -93,6 +128,7 @@ with tax still in, and the fleet tiles name it ("tax still in: …").
 | GET  | `/api/fleet` | board | latest snapshot + summary (behind Basic auth) |
 | GET  | `/api/history` | board | each venue's `days` list (behind Basic auth) |
 | GET  | `/` | board | the live status board (behind Basic auth) |
+| POST | `/api/alerts/test` | board | send a test text to `ALERT_TO` (behind Basic auth) |
 | GET  | `/healthz` | — | health check |
 
 ## Run locally

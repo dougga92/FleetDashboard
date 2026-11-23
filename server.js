@@ -10,7 +10,8 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const APP_VERSION = require('./package.json').version;   // the board's own version (bump in package.json)
+const APP_VERSION = require('./package.json').version;
+const notifier = require('./notifier');   // texts on-call for critical alerts + dark venues   // the board's own version (bump in package.json)
 
 const app = express();
 app.set('trust proxy', true);
@@ -107,6 +108,7 @@ app.post('/api/heartbeat', (req, res) => {
   fleet.set(venueKey(p), { ...p, receivedAt: Date.now() });
   trackAcsSends(venueKey(p), p);
   res.json({ ok: true });
+  notifier.check(fleet).catch(e => console.error('[alerts]', e));   // new critical alerts text right away
 });
 
 // ── Dashboard auth (HTTP Basic; open if no password set) ─────────────────────
@@ -186,6 +188,7 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     offlineAfterSec: OFFLINE_AFTER_MS / 1000,
     generatedAt: new Date().toISOString(),
     dashboardVersion: APP_VERSION,
+    notifier: notifier.status(),
   });
 });
 
@@ -236,5 +239,16 @@ app.get('/api/rustdesk', dashAuth, (_req, res) => {
 });
 app.use('/assets', express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req, res) => res.json({ ok: true, venues: fleet.size }));
+
+// Dark venues send nothing, so check on a timer too. (On the Free plan the app
+// stays awake only while venues keep posting; see README, Alerts.)
+setInterval(() => notifier.check(fleet).catch(e => console.error('[alerts]', e)), 30e3).unref();
+// Test text to the on-call numbers, from the board's Alerts tile.
+app.post('/api/alerts/test', dashAuth, async (_req, res) => {
+  if (!notifier.enabled()) return res.status(400).json({ ok: false, error: 'Twilio not set up: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM and ALERT_TO.' });
+  await notifier.sendText(['Fotomentum Fleet: test text. Alerts for critical trouble and offline venues will come to this number.']);
+  const last = notifier.status().recent[0];
+  res.status(last && last.ok ? 200 : 502).json({ ok: !!(last && last.ok), error: last && last.error });
+});
 
 app.listen(PORT, () => console.log(`Fotomentum Fleet Dashboard listening on :${PORT}`));

@@ -78,6 +78,7 @@ function renderTiles(tiles) {
       <div class="tile-value ${t.cls}">${esc(t.value)}</div>
       ${t.meter ? meter(t.meter) : ''}
       <div class="tile-sub">${esc(t.sub)}</div>
+      ${t.extra || ''}
     </div>`).join('');
 }
 
@@ -88,6 +89,7 @@ function renderSummary(s) {
   const tiles = [
     { label: 'Venues online', value: `${s.online}/${s.total}`, cls: s.offline ? 'warn' : 'ok',
       sub: s.offline ? `${s.offline} offline` : 'all reporting' },
+    alertsTile(),
     { label: 'All events to date', value: money(s.eventNet ?? s.eventRevenue), cls: '',
       sub: `sales, no tax · ${s.eventOrders} order${s.eventOrders === 1 ? '' : 's'} · ${s.eventVenues} venue${s.eventVenues === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
     { label: 'Avg per order', value: avgText(s.eventNet ?? s.eventRevenue, s.eventOrders), cls: '',
@@ -261,6 +263,65 @@ function versionTag(ver) {
 
 const keyOf = (v) => String(v.machineId || v.venue || 'unknown');
 
+// ── Venue trouble (heartbeat `alerts`, EventPhotos 1.3.43+) ──
+// A venue's own alerts count only while it is reporting; a dark venue's last
+// alerts are stale, and "no heartbeat" is worked out here from its age.
+const DARK_SEC = 6 * 60;
+const isDark = (v) => (Number(v.ageSec) || 0) > (notifierState ? notifierState.darkAfterMin * 60 : DARK_SEC);
+function venueAlerts(v) {
+  if (isDark(v)) return [{ key: 'offline', severity: 'critical', message: `No heartbeat in ${Math.max(1, Math.round(v.ageSec / 60))} min (venue offline)`, sinceMs: v.ageSec * 1000 }];
+  if (!v.online) return [];
+  const sent = Date.parse(v.sentAt);
+  return (Array.isArray(v.alerts) ? v.alerts : []).filter(a => a && a.key).map(a => ({
+    key: String(a.key), severity: a.severity === 'critical' ? 'critical' : 'warn', message: String(a.message || a.key),
+    // venue clock to venue clock (sentAt − since), plus the heartbeat's age
+    sinceMs: Number(a.since) > 0 && Number.isFinite(sent) ? Math.max(0, sent - Number(a.since)) + (Number(v.ageSec) || 0) * 1000 : null,
+  }));
+}
+const levelOf = (list) => list.some(a => a.severity === 'critical') ? 'critical' : list.length ? 'warn' : null;
+function statusPill(v) {
+  const lvl = levelOf(venueAlerts(v));
+  if (!v.online) return '<span class="status-pill status-offline"><span class="dot"></span>Offline</span>';
+  if (lvl === 'critical') return '<span class="status-pill status-offline"><span class="dot"></span>Critical</span>';
+  if (lvl === 'warn') return '<span class="status-pill status-warn"><span class="dot"></span>Warning</span>';
+  return '<span class="status-pill status-online"><span class="dot"></span>Online</span>';
+}
+const forText = (ms) => ms == null ? '' : ' · for ' + agoShort(ms).replace(/ ago$/, '').replace('just now', '<1m');
+function alertsBlock(v) {
+  const list = venueAlerts(v);
+  if (!list.length) return '';
+  const open = notifierState && notifierState.open ? notifierState.open.filter(o => o.venueKey === keyOf(v) && o.texted) : [];
+  const texted = (k) => { const o = open.find(x => x.key === k); return o && o.notifiedAt ? ' · texted ' + new Date(o.notifiedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; };
+  return `<ul class="alerts">${list.sort((a, b) => (a.severity === 'critical' ? 0 : 1) - (b.severity === 'critical' ? 0 : 1)).map(a => `
+      <li class="alert alert-${a.severity}"><span class="alert-dot" aria-hidden="true"></span>
+        <span><span class="sr-only">${a.severity === 'critical' ? 'Critical' : 'Warning'}: </span>${esc(a.message)}<span class="alert-meta">${esc(forText(a.sinceMs) + texted(a.key))}</span></span></li>`).join('')}
+    </ul>`;
+}
+function alertsTile() {
+  const live = lastVenues;
+  const crit = live.filter(v => levelOf(venueAlerts(v)) === 'critical').length;
+  const warn = live.filter(v => levelOf(venueAlerts(v)) === 'warn').length;
+  const n = notifierState;
+  const hrs = n && n.hours ? `${hourText(n.hours.start)}–${hourText(n.hours.end)}` : '';
+  const sub = !n ? '' : n.texting ? `texts on · ${n.recipients} number${n.recipients === 1 ? '' : 's'} · ${hrs} venue time` : 'texts off · Twilio not set up';
+  return {
+    label: 'Alerts',
+    value: crit ? `${crit} critical` : warn ? `${warn} warning${warn === 1 ? '' : 's'}` : 'All clear',
+    cls: crit ? 'bad' : warn ? 'warn' : 'ok',
+    sub: sub + (crit && warn ? ` · ${warn} warning` : ''),
+    extra: n && n.texting ? '<button type="button" class="test-text" id="test-text">Send test text</button>' : '',
+  };
+}
+const hourText = (h) => h === 0 || h === 24 ? 'midnight' : h === 12 ? 'noon' : (h % 12) + (h < 12 ? ' am' : ' pm');
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#test-text');
+  if (!b) return;
+  b.disabled = true; b.textContent = 'Sending…';
+  fetch('/api/alerts/test', { method: 'POST' }).then(r => r.json()).then(j => {
+    b.textContent = j.ok ? 'Test text sent' : 'Failed: ' + (j.error || 'error');
+  }).catch(() => { b.textContent = 'Failed'; }).finally(() => setTimeout(() => { b.disabled = false; b.textContent = 'Send test text'; }, 4000));
+});
+
 function card(v, sale) {
   const t = v.today || {};
   return `
@@ -272,10 +333,9 @@ function card(v, sale) {
           <div class="venue-name">${esc(v.venue || 'Unknown venue')}</div>
           ${v.event ? `<div class="venue-event">${esc(v.event)}</div>` : ''}
         </div>
-        <span class="status-pill ${v.online ? 'status-online' : 'status-offline'}">
-          <span class="dot"></span>${v.online ? 'Online' : 'Offline'}
-        </span>
+        ${statusPill(v)}
       </div>
+      ${viewDate ? '' : alertsBlock(v)}
 
       <div class="card-money">
         <div class="money-pair">
@@ -321,6 +381,7 @@ async function tick() {
     if (data.dashboardVersion) $('app-ver').textContent = 'v' + data.dashboardVersion;
     lastVenues = data.venues;
     lastSummary = data.summary;
+    notifierState = data.notifier || null;
     latestVersion = data.venues.map(v => v.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
     detectSales(data.venues);           // sales + sound always follow the live numbers
     if (Date.now() - historyAt > HISTORY_MS || data.venues.some(v => v.dayCount && !venueHistory.has(keyOf(v)))) loadHistory();
@@ -343,6 +404,7 @@ const store = {
 let sortMode = store.get(SORT_KEY, 'name');
 let customOrder = store.get(ORDER_KEY, []);
 let lastVenues = [];
+let notifierState = null;          // server's texting status (GET /api/fleet .notifier)
 let dragging = null;
 
 const rev = (v) => netOf(v.today, v);   // before tax

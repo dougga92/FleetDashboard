@@ -265,3 +265,17 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 .tax-money { font-size: 2rem; font-weight: 800; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .event-meta { flex-basis: 100%; }
+
+/* Venue alerts (heartbeat alerts + offline) */
+.status-warn { background: rgba(251,191,36,.14); color: var(--amber); border: 1px solid rgba(251,191,36,.4); }
+.status-warn .dot { background: var(--amber); }
+.alerts { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.alert { display: grid; grid-template-columns: 10px 1fr; gap: 8px; align-items: start; font-size: 0.85rem; line-height: 1.35; padding: 8px 10px; border-radius: 10px; }
+.alert-critical { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.4); color: #fecaca; }
+.alert-warn { background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35); color: #fde68a; }
+.alert-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
+.alert-critical .alert-dot { background: var(--red); }
+.alert-warn .alert-dot { background: var(--amber); }
+.alert-meta { color: var(--muted); white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.test-text { margin-top: 8px; font: inherit; font-size: 0.75rem; color: var(--text); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
