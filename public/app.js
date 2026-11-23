@@ -322,6 +322,21 @@ document.addEventListener('click', (e) => {
   }).catch(() => { b.textContent = 'Failed'; }).finally(() => setTimeout(() => { b.disabled = false; b.textContent = 'Send test text'; }, 4000));
 });
 
+// Weather at the venue (heartbeat `weather`, EventPhotos 1.3.44+; refreshes about
+// hourly). Informational only. Rain, snow and storms get a tinted chip.
+const fnum = (n) => n != null && Number.isFinite(Number(n)) ? Math.round(Number(n)) : null;
+function weatherChip(v) {
+  const w = v.weather;
+  if (!w || typeof w !== 'object') return '';
+  const t = fnum(w.tempF), hi = fnum(w.hiF), lo = fnum(w.loF), pp = fnum(w.precipPct);
+  const main = w.summary ? String(w.summary) : [w.icon, w.label, t != null ? t + '°F' : ''].filter(Boolean).join(' ');
+  if (!main) return '';
+  const extra = [hi != null && lo != null ? `H${hi}/L${lo}` : '', pp != null && pp > 0 ? `${pp}% rain` : ''].filter(Boolean).join(' · ');
+  const cat = ['rain', 'snow', 'storm'].includes(w.category) ? ' wx-' + w.category : '';
+  const at = w.at && !Number.isNaN(Date.parse(w.at)) ? ' · updated ' + new Date(w.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  return `<div class="wx${cat}" title="${esc((w.place || 'Weather') + at)}">${esc(main)}${extra ? `<span class="wx-extra"> · ${esc(extra)}</span>` : ''}</div>`;
+}
+
 function card(v, sale) {
   const t = v.today || {};
   return `
@@ -332,6 +347,7 @@ function card(v, sale) {
         <div class="card-title">
           <div class="venue-name">${esc(v.venue || 'Unknown venue')}</div>
           ${v.event ? `<div class="venue-event">${esc(v.event)}</div>` : ''}
+          ${weatherChip(v)}
         </div>
         ${statusPill(v)}
       </div>

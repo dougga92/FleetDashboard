@@ -120,6 +120,14 @@ unknown until it reports again. On the Free plan the app stays awake only while
 venues post heartbeats; if every venue went dark at once, nothing would text
 (B1 + Always On fixes that).
 
+## Weather
+
+Venues on EventPhotos 1.3.44+ with a weather location send `weather: { category,
+label, icon, tempF, hiF, loF, precipPct, place, summary, at }` (refreshed about
+hourly). Each card shows a chip under the event: `summary` (or icon + label +
+temp), then `H/L` and the rain chance. Rain and snow get a blue tint, storms
+amber; hover shows the place and when it was updated. Informational only.
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |
