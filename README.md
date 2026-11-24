@@ -128,6 +128,24 @@ hourly). Each card shows a chip under the event: `summary` (or icon + label +
 temp), then `H/L` and the rain chance. Rain and snow get a blue tint, storms
 amber; hover shows the place and when it was updated. Informational only.
 
+## Remote update
+
+Venues on EventPhotos 1.3.46+ obey an "update now" command that rides back on the
+heartbeat reply: `{ ok: true, update: { id, target? } }`. The venue runs its own
+Pull Updates (GitHub **main HEAD** → build → restart) once per `id`, unless its
+local `remote_update_enabled` setting is `0`. **Push to GitHub first, then update.**
+
+On the board, tap a venue's version pill, then tap **Update now?** within 6 s. Only
+online venues on 1.3.46+ get a button. Older venues must be Pull-Updated by hand once.
+If the venue is behind the newest version on the board, that version is the target.
+Otherwise there's no target, and the update is done when the venue's `commit` changes.
+The pill shows `updating…` (tap twice to cancel) and the status says **Updating**
+while the venue restarts. A pending update suppresses the VENUE OFFLINE text. If
+nothing changes within `UPDATE_GIVE_UP_MIN` (default 30) after delivery, the board
+stops sending and shows `· no change`, usually because the venue was already on HEAD.
+State is in memory, so a dashboard restart forgets pending updates.
+Rollout: update one venue → check it → update the rest.
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |
@@ -136,6 +154,7 @@ amber; hover shows the place and when it was updated. Informational only.
 | GET  | `/api/fleet` | board | latest snapshot + summary (behind Basic auth) |
 | GET  | `/api/history` | board | each venue's `days` list (behind Basic auth) |
 | GET  | `/` | board | the live status board (behind Basic auth) |
+| POST / DELETE | `/api/update/:venueKey` | board | issue / cancel a remote update (JSON body; behind Basic auth) |
 | POST | `/api/alerts/test` | board | send a test text to `ALERT_TO` (behind Basic auth) |
 | GET  | `/healthz` | — | health check |
 

@@ -19,6 +19,7 @@
 // unknown until it reports again (the board has no list of venues to expect).
 
 const env = process.env;
+const updater = require('./updater');
 const num = (v, d) => (Number(v) > 0 ? Number(v) : d);
 
 const cfg = {
@@ -75,10 +76,11 @@ const sent = [];            // recent outbound texts for the board: { at, lines,
 let ticking = false;
 
 // Active trouble for one venue right now: its own textable alerts + offline.
-function activeFor(v, now) {
+function activeFor(v, now, vKey) {
   const out = [];
   const age = now - v.receivedAt;
   if (age > cfg.darkMs) {
+    if (vKey && updater.quiet(vKey, now)) return out;   // an update restart: the gap is expected
     out.push({ key: 'offline', severity: 'critical', since: v.receivedAt,
                message: `VENUE OFFLINE — no heartbeat in ${mins(age)} min` });
     return out;                       // its last alerts are stale; offline says it all
@@ -122,7 +124,7 @@ async function check(fleet, now = Date.now()) {
     for (const [vKey, v] of fleet) {
       const name = venueName(v);
       const open = inWindow(name, now);
-      for (const a of activeFor(v, now)) {
+      for (const a of activeFor(v, now, vKey)) {
         if (!textable(a)) continue;
         const id = `${vKey}|${a.key}`;
         seen.add(id);

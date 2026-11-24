@@ -11,7 +11,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const APP_VERSION = require('./package.json').version;
-const notifier = require('./notifier');   // texts on-call for critical alerts + dark venues   // the board's own version (bump in package.json)
+const notifier = require('./notifier');   // texts on-call for critical alerts + dark venues
+const updater = require('./updater');     // remote "update now" over the heartbeat reply
 
 const app = express();
 app.set('trust proxy', true);
@@ -107,7 +108,8 @@ app.post('/api/heartbeat', (req, res) => {
   if (!p.machineId && !p.venue) return res.status(400).json({ error: 'missing venue identity' });
   fleet.set(venueKey(p), { ...p, receivedAt: Date.now() });
   trackAcsSends(venueKey(p), p);
-  res.json({ ok: true });
+  const update = updater.onHeartbeat(venueKey(p), p);   // only while an update is pending for this venue
+  res.json(update ? { ok: true, update } : { ok: true });
   notifier.check(fleet).catch(e => console.error('[alerts]', e));   // new critical alerts text right away
 });
 
@@ -127,7 +129,8 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     .map(({ days, ...v }) => {           // days[] is served by /api/history, not every 10 s poll
       const ageSec = Math.round((now - v.receivedAt) / 1000);
       return { ...v, ageSec, inTotals: inTotals(v), dayCount: Array.isArray(days) ? days.length : 0, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
-               serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS };
+               serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS,
+               remoteUpdate: updater.statusFor(venueKey(v), now), canUpdate: updater.eligible(v) };
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
 
@@ -188,6 +191,7 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
     offlineAfterSec: OFFLINE_AFTER_MS / 1000,
     generatedAt: new Date().toISOString(),
     dashboardVersion: APP_VERSION,
+    remoteUpdateMin: updater.MIN_VERSION,
     notifier: notifier.status(),
   });
 });
@@ -249,6 +253,25 @@ app.post('/api/alerts/test', dashAuth, async (_req, res) => {
   await notifier.sendText(['Fotomentum Fleet: test text. Alerts for critical trouble and offline venues will come to this number.']);
   const last = notifier.status().recent[0];
   res.status(last && last.ok ? 200 : 502).json({ ok: !!(last && last.ok), error: last && last.error });
+});
+
+// Remote update: the board's version pill → confirm. JSON body only (a cross-site
+// form can't send JSON without a preflight, so the board password can't be ridden).
+app.post('/api/update/:key', dashAuth, (req, res) => {
+  if (!req.is('application/json')) return res.status(415).json({ ok: false, error: 'JSON only' });
+  const v = fleet.get(req.params.key);
+  if (!v) return res.status(404).json({ ok: false, error: 'Unknown venue' });
+  if (Date.now() - v.receivedAt >= OFFLINE_AFTER_MS) return res.status(409).json({ ok: false, error: 'Venue is offline' });
+  if (!updater.eligible(v)) return res.status(409).json({ ok: false, error: `Needs EventPhotos ${updater.MIN_VERSION}+ (Pull-Update it by hand once)` });
+  try {
+    const cmd = updater.issue(req.params.key, v, req.body && req.body.target);
+    console.log(`[update] ${v.venue}: issued ${cmd.id} target ${cmd.target || 'main HEAD'} (from ${cmd.fromVersion} ${cmd.fromCommit || ''})`);
+    res.json({ ok: true, update: updater.statusFor(req.params.key) });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+app.delete('/api/update/:key', dashAuth, (req, res) => {
+  if (!req.is('application/json')) return res.status(415).json({ ok: false, error: 'JSON only' });
+  res.json({ ok: updater.cancel(req.params.key) });
 });
 
 app.listen(PORT, () => console.log(`Fotomentum Fleet Dashboard listening on :${PORT}`));

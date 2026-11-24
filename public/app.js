@@ -253,13 +253,60 @@ function cmpVersion(a, b) {
   }
   return 0;
 }
-function versionTag(ver) {
-  if (!ver) return '<span class="ver ver-unknown" title="Version not reported">v?</span>';
-  if (latestVersion && cmpVersion(ver, latestVersion) < 0) {
-    return `<span class="ver ver-old" title="Behind: latest is v${esc(latestVersion)}">v${esc(ver)}</span>`;
+// Remote update (EventPhotos 1.3.46+): tap the version pill, tap again to confirm.
+// The venue pulls GitHub main HEAD, so push first. Target = the newest version any
+// venue reports if this one is behind it; otherwise none (done when its commit changes).
+let armed = null;                         // { key, act: 'update'|'cancel', until }
+const isArmed = (k, act) => armed && armed.key === k && armed.act === act && Date.now() < armed.until;
+const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function versionTag(v) {
+  const ver = v.version, k = keyOf(v), u = v.remoteUpdate;
+  if (u && u.state === 'pending') {
+    const label = isArmed(k, 'cancel') ? 'Cancel update?' : `updating${u.target ? ' → v' + u.target : ''}…`;
+    return `<button type="button" class="ver ver-upd" data-upd="${esc(k)}" data-act="cancel"
+      title="Update sent ${esc(hhmm(u.issuedAt))}${u.deliveredAt ? ', delivered ' + esc(hhmm(u.deliveredAt)) : ', waiting for next heartbeat'} · from v${esc(u.fromVersion || '?')}${u.fromCommit ? ' (' + esc(u.fromCommit) + ')' : ''} · tap to cancel">${esc(label)}</button>`;
   }
-  return `<span class="ver ver-ok" title="Latest version">v${esc(ver)}</span>`;
+  if (!ver) return '<span class="ver ver-unknown" title="Version not reported">v?</span>';
+  const behind = latestVersion && cmpVersion(ver, latestVersion) < 0;
+  let note = behind ? `Behind: latest is v${latestVersion}` : 'Latest version';
+  if (v.commit) note += ` · commit ${v.commit}`;
+  if (u && u.state === 'done') note += ` · updated ${hhmm(u.endedAt)} from v${u.fromVersion || '?'}`;
+  if (u && u.state === 'gaveup') note += ` · update sent ${hhmm(u.issuedAt)} made no change (already on main?)`;
+  const cls = behind ? 'ver-old' : 'ver-ok';
+  const text = `v${ver}${u && u.state === 'gaveup' ? ' · no change' : ''}`;
+  if (!v.canUpdate || !v.online) {
+    if (!v.canUpdate && remoteUpdateMin) note += ` · remote update needs v${remoteUpdateMin}+ (Pull-Update by hand once)`;
+    return `<span class="ver ${cls}" title="${esc(note)}">${esc(text)}</span>`;
+  }
+  if (isArmed(k, 'update')) {
+    return `<button type="button" class="ver ver-arm" data-upd="${esc(k)}" data-act="update" title="Pulls GitHub main and restarts the venue for a few minutes">Update now?</button>`;
+  }
+  return `<button type="button" class="ver ${cls}" data-upd="${esc(k)}" data-act="update" title="${esc(note + ' · tap to update from GitHub main')}">${esc(text)}</button>`;
 }
+let remoteUpdateMin = null;
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-upd]');
+  if (!b) return;
+  const k = b.dataset.upd, act = b.dataset.act;
+  if (!isArmed(k, act)) {                 // first tap arms it for 6 s
+    armed = { key: k, act, until: Date.now() + 6000 };
+    renderGrid();
+    setTimeout(() => { if (armed && armed.key === k && Date.now() >= armed.until) { armed = null; renderGrid(); } }, 6100);
+    return;
+  }
+  armed = null;
+  b.disabled = true; b.textContent = act === 'cancel' ? 'Cancelling…' : 'Sending…';
+  const v = lastVenues.find(x => keyOf(x) === k);
+  const target = act === 'update' && v && v.version && latestVersion && cmpVersion(v.version, latestVersion) < 0 ? latestVersion : null;
+  fetch('/api/update/' + encodeURIComponent(k), {
+    method: act === 'cancel' ? 'DELETE' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(act === 'cancel' ? {} : { target }),
+  }).then(r => r.json()).then(j => {
+    if (!j.ok) { b.textContent = j.error || 'Failed'; b.title = j.error || ''; setTimeout(tick, 4000); }
+    else tick();
+  }).catch(() => { b.textContent = 'Failed'; setTimeout(tick, 4000); });
+});
 
 const keyOf = (v) => String(v.machineId || v.venue || 'unknown');
 
@@ -281,6 +328,7 @@ function venueAlerts(v) {
 const levelOf = (list) => list.some(a => a.severity === 'critical') ? 'critical' : list.length ? 'warn' : null;
 function statusPill(v) {
   const lvl = levelOf(venueAlerts(v));
+  if (!v.online && v.remoteUpdate && v.remoteUpdate.state === 'pending') return '<span class="status-pill status-warn"><span class="dot"></span>Updating</span>';
   if (!v.online) return '<span class="status-pill status-offline"><span class="dot"></span>Offline</span>';
   if (lvl === 'critical') return '<span class="status-pill status-offline"><span class="dot"></span>Critical</span>';
   if (lvl === 'warn') return '<span class="status-pill status-warn"><span class="dot"></span>Warning</span>';
@@ -384,7 +432,7 @@ function card(v, sale) {
       <div class="card-foot">
         ${machinesRow(v)}
         <span class="meta">${v.online ? 'updated ' + ago(v.ageSec) : 'last seen ' + ago(v.ageSec)}</span>
-        ${versionTag(v.version)}
+        ${versionTag(v)}
       </div>
     </div>`;
 }
@@ -395,6 +443,7 @@ async function tick() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     if (data.dashboardVersion) $('app-ver').textContent = 'v' + data.dashboardVersion;
+    remoteUpdateMin = data.remoteUpdateMin || null;
     lastVenues = data.venues;
     lastSummary = data.summary;
     notifierState = data.notifier || null;

@@ -285,3 +285,9 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 .wx-extra { color: var(--muted); }
 .wx-rain, .wx-snow { background: rgba(56,135,229,.14); border-color: rgba(56,135,229,.5); }
 .wx-storm { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.5); }
+
+/* Remote update: the version pill is a button on venues that can take it */
+button.ver { border: 0; font-family: inherit; cursor: pointer; line-height: inherit; }
+button.ver:disabled { opacity: .7; cursor: default; }
+.ver-arm { color: #1c1404; background: var(--amber); outline: 2px solid var(--amber); outline-offset: 2px; }
+.ver-upd { color: #dbeafe; background: rgba(59,130,246,.22); border: 1px solid rgba(59,130,246,.55) !important; }
