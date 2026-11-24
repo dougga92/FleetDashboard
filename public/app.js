@@ -279,9 +279,9 @@ function versionTag(v) {
     return `<span class="ver ${cls}" title="${esc(note)}">${esc(text)}</span>`;
   }
   if (isArmed(k, 'update')) {
-    return `<button type="button" class="ver ver-arm" data-upd="${esc(k)}" data-act="update" title="Pulls GitHub main and restarts the venue for a few minutes">Update now?</button>`;
+    return `<span class="ver-wrap"><span class="ver ${cls}">${esc(text)}</span><button type="button" class="ver-btn ver-arm" data-upd="${esc(k)}" data-act="update" title="Pulls GitHub main and restarts the venue for a few minutes">Tap to confirm</button></span>`;
   }
-  return `<button type="button" class="ver ${cls}" data-upd="${esc(k)}" data-act="update" title="${esc(note + ' · tap to update from GitHub main')}">${esc(text)}</button>`;
+  return `<span class="ver-wrap"><span class="ver ${cls}" title="${esc(note)}">${esc(text)}</span><button type="button" class="ver-btn" data-upd="${esc(k)}" data-act="update" title="Pull GitHub main on this venue (restarts it for a few minutes)">Update</button></span>`;
 }
 let remoteUpdateMin = null;
 document.addEventListener('click', (e) => {

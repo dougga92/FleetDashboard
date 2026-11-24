@@ -174,7 +174,7 @@ body {
 .card-foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
 .card-foot > .machines { justify-self: start; }
 .card-foot > .meta { justify-self: center; text-align: center; }
-.card-foot > .ver { justify-self: end; }
+.card-foot > .ver, .card-foot > .ver-wrap { justify-self: end; }
 .ver { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .ver-ok { color: #052e16; background: var(--green); }
 .ver-old { color: #1c1404; background: var(--amber); }
@@ -289,5 +289,10 @@ body.past-view .daybar select { border-color: var(--blue); color: var(--blue); f
 /* Remote update: the version pill is a button on venues that can take it */
 button.ver { border: 0; font-family: inherit; cursor: pointer; line-height: inherit; }
 button.ver:disabled { opacity: .7; cursor: default; }
-.ver-arm { color: #1c1404; background: var(--amber); outline: 2px solid var(--amber); outline-offset: 2px; }
 .ver-upd { color: #dbeafe; background: rgba(59,130,246,.22); border: 1px solid rgba(59,130,246,.55) !important; }
+
+.ver-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.ver-btn { font: inherit; font-size: 0.75rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); white-space: nowrap; }
+.ver-btn:hover { border-color: var(--text); }
+.ver-btn.ver-arm { color: #1c1404; background: var(--amber); border-color: var(--amber); }

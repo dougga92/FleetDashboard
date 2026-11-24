@@ -135,7 +135,7 @@ heartbeat reply: `{ ok: true, update: { id, target? } }`. The venue runs its own
 Pull Updates (GitHub **main HEAD** → build → restart) once per `id`, unless its
 local `remote_update_enabled` setting is `0`. **Push to GitHub first, then update.**
 
-On the board, tap a venue's version pill, then tap **Update now?** within 6 s. Only
+On the board, tap **Update** beside a venue's version pill, then **Tap to confirm** within 6 s. Only
 online venues on 1.3.46+ get a button. Older venues must be Pull-Updated by hand once.
 If the venue is behind the newest version on the board, that version is the target.
 Otherwise there's no target, and the update is done when the venue's `commit` changes.
