@@ -689,9 +689,8 @@ function renderCharts(venues) {
   }).join('');
 }
 // Remember open/closed per browser; draw as soon as it opens.
-$('compare').open = store.get('fleet.compare', window.innerWidth >= 700);   // phones start collapsed
+// Chart fly-outs start closed (they cover the cards).
 $('compare').addEventListener('toggle', () => {
-  store.set('fleet.compare', $('compare').open);
   if ($('compare').open) renderCharts(shownVenues());
 });
 // Tooltip: hover (mouse), focus (keyboard) or tap (touch).
@@ -874,11 +873,12 @@ function renderHistory() {
       </figure>`).join('')}
     </div>`;
 }
-$('history').addEventListener('toggle', () => { store.set('fleet.history', $('history').open); renderHistory(); });
+$('history').addEventListener('toggle', () => renderHistory());
 $('hist').addEventListener('click', (e) => {
   const c = e.target.closest('.col');
   if (!c) return;
   setView(liveDates().has(c.dataset.date) ? null : c.dataset.date);
+  closeFlies();                        // show that night's cards
 });
 $('hist').addEventListener('pointerover', (e) => { const c = e.target.closest('.col'); if (c) showTip(c); });
 $('hist').addEventListener('pointerleave', hideTip);
@@ -977,8 +977,7 @@ function renderSelling() {
       </figure>
     </div>`;
 }
-$('selling').open = store.get('fleet.selling', window.innerWidth >= 700);
-$('selling').addEventListener('toggle', () => { store.set('fleet.selling', $('selling').open); renderSelling(); });
+$('selling').addEventListener('toggle', () => renderSelling());
 $('selling-body').addEventListener('pointerover', (e) => { const row = e.target.closest('.bar-row[data-tip]'); if (row) showTip(row); });
 $('selling-body').addEventListener('pointerleave', hideTip);
 $('selling-body').addEventListener('focusin', (e) => { const row = e.target.closest('.bar-row[data-tip]'); if (row) showTip(row); });
@@ -1049,9 +1048,23 @@ $('grid').addEventListener('click', (e) => {
   if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy).then(done, () => {});
 });
 
+// Chart fly-outs: one open at a time; close with ×, the scrim, or Esc.
+const flies = [...document.querySelectorAll('details.fly')];
+function syncFly() {
+  const any = flies.some(d => d.open);
+  $('fly-scrim').hidden = !any;
+  document.body.classList.toggle('fly-open', any);
+}
+flies.forEach(d => d.addEventListener('toggle', () => {
+  if (d.open) flies.forEach(o => { if (o !== d && o.open) o.open = false; });
+  syncFly();
+}));
+const closeFlies = () => flies.forEach(d => { d.open = false; });
+document.addEventListener('click', (e) => { if (e.target.closest('.fly-close') || e.target.id === 'fly-scrim') closeFlies(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && flies.some(d => d.open)) closeFlies(); });
+
 renderSortBar();
 renderHistControls();
 renderSellControls();
-$('history').open = store.get('fleet.history', window.innerWidth >= 700);
 tick();
 setInterval(tick, POLL_MS);

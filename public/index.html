@@ -19,51 +19,74 @@
     </div>
   </header>
 
-  <main class="wrap">
-    <div class="daybar" id="daybar">
-      <button type="button" id="day-prev" class="day-step" aria-label="Previous day">‹</button>
-      <label class="day-pick"><span class="sort-label">Showing</span>
-        <select id="day-select" aria-label="Day to show"><option value="">Today (live)</option></select>
-      </label>
-      <button type="button" id="day-next" class="day-step" aria-label="Next day">›</button>
-      <button type="button" id="day-live" class="day-live" hidden>Back to live</button>
-      <span class="sort-hint" id="day-hint"></span>
-    </div>
-    <section class="summary" id="summary" aria-label="Fleet summary"></section>
-    <details class="compare" id="history">
-      <summary>Night by night</summary>
-      <div class="hist-controls" role="group" aria-label="Measure">
-        <button type="button" data-hm="revenue">Revenue</button>
-        <button type="button" data-hm="orders">Orders</button>
-        <button type="button" data-hm="photos">Photos</button>
+  <div class="shell">
+    <aside class="rail" aria-label="Fleet summary and charts">
+      <div class="daybar" id="daybar">
+        <button type="button" id="day-prev" class="day-step" aria-label="Previous day">‹</button>
+        <label class="day-pick"><span class="sort-label">Showing</span>
+          <select id="day-select" aria-label="Day to show"><option value="">Today (live)</option></select>
+        </label>
+        <button type="button" id="day-next" class="day-step" aria-label="Next day">›</button>
+        <button type="button" id="day-live" class="day-live" hidden>Back to live</button>
+        <span class="sort-hint" id="day-hint"></span>
       </div>
-      <div id="hist"></div>
-    </details>
-    <details class="compare" id="selling">
-      <summary>What's selling</summary>
-      <div class="hist-controls" role="group" aria-label="Period">
-        <button type="button" data-ss="today">Today</button>
-        <button type="button" data-ss="event">This event</button>
+      <section class="summary" id="summary" aria-label="Fleet summary"></section>
+
+      <div class="rail-label">Charts</div>
+      <details class="compare fly" id="history" name="fly">
+        <summary><span class="fly-ico" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M3 17V9M7.5 17V5M12 17v-6M16.5 17V3"/></svg></span>
+          <span class="fly-txt"><span class="fly-name">Night by night</span><span class="fly-hint">Last 21 active nights</span></span>
+          <span class="fly-chev" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M8 5l5 5-5 5"/></svg></span></summary>
+        <div class="fly-panel" role="region" aria-label="Night by night">
+          <div class="fly-head"><h2>Night by night</h2><button type="button" class="fly-close" aria-label="Close">×</button></div>
+          <div class="hist-controls" role="group" aria-label="Measure">
+            <button type="button" data-hm="revenue">Revenue</button>
+            <button type="button" data-hm="orders">Orders</button>
+            <button type="button" data-hm="photos">Photos</button>
+          </div>
+          <div id="hist"></div>
+        </div>
+      </details>
+      <details class="compare fly" id="selling" name="fly">
+        <summary><span class="fly-ico" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/><path d="M10 3.5V10l4.6 4.6"/></svg></span>
+          <span class="fly-txt"><span class="fly-name">What's selling</span><span class="fly-hint">Packages, à la carte, upsells</span></span>
+          <span class="fly-chev" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M8 5l5 5-5 5"/></svg></span></summary>
+        <div class="fly-panel" role="region" aria-label="What's selling">
+          <div class="fly-head"><h2>What's selling</h2><button type="button" class="fly-close" aria-label="Close">×</button></div>
+          <div class="hist-controls" role="group" aria-label="Period">
+            <button type="button" data-ss="today">Today</button>
+            <button type="button" data-ss="event">This event</button>
+          </div>
+          <div id="selling-body"></div>
+        </div>
+      </details>
+      <details class="compare fly" id="compare" name="fly">
+        <summary><span class="fly-ico" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M3 5h11M3 10h14M3 15h7"/></svg></span>
+          <span class="fly-txt"><span class="fly-name">Compare venues</span><span class="fly-hint">Side-by-side bars</span></span>
+          <span class="fly-chev" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M8 5l5 5-5 5"/></svg></span></summary>
+        <div class="fly-panel" role="region" aria-label="Compare venues">
+          <div class="fly-head"><h2>Compare venues</h2><button type="button" class="fly-close" aria-label="Close">×</button></div>
+          <div class="charts" id="charts"></div>
+        </div>
+      </details>
+    </aside>
+    <div class="fly-scrim" id="fly-scrim" hidden></div>
+
+    <main class="wrap">
+      <div class="chart-tip" id="chart-tip" role="tooltip" hidden></div>
+      <div class="sortbar" id="sortbar" role="group" aria-label="Sort venues">
+        <span class="sort-label">Sort</span>
+        <button type="button" data-sort="name">Name</button>
+        <button type="button" data-sort="high">Highest $</button>
+        <button type="button" data-sort="low">Lowest $</button>
+        <button type="button" data-sort="custom">Drag to order</button>
+        <button type="button" id="sound-btn" class="sound-btn" aria-pressed="false">🔕 Sound off</button>
+        <span class="sort-hint" id="sort-hint" hidden>Drag a card by ⠿ · saved on this device only</span>
       </div>
-      <div id="selling-body"></div>
-    </details>
-    <details class="compare" id="compare">
-      <summary>Compare venues</summary>
-      <div class="charts" id="charts"></div>
-    </details>
-    <div class="chart-tip" id="chart-tip" role="tooltip" hidden></div>
-    <div class="sortbar" id="sortbar" role="group" aria-label="Sort venues">
-      <span class="sort-label">Sort</span>
-      <button type="button" data-sort="name">Name</button>
-      <button type="button" data-sort="high">Highest $</button>
-      <button type="button" data-sort="low">Lowest $</button>
-      <button type="button" data-sort="custom">Drag to order</button>
-      <button type="button" id="sound-btn" class="sound-btn" aria-pressed="false">🔕 Sound off</button>
-      <span class="sort-hint" id="sort-hint" hidden>Drag a card by ⠿ · saved on this device only</span>
-    </div>
-    <section class="grid" id="grid" aria-label="Venues"></section>
-    <p class="empty" id="empty" hidden>No venues have reported yet. Once a venue's <code>TELEMETRY_URL</code> points here, it appears within a minute.</p>
-  </main>
+      <section class="grid" id="grid" aria-label="Venues"></section>
+      <p class="empty" id="empty" hidden>No venues have reported yet. Once a venue's <code>TELEMETRY_URL</code> points here, it appears within a minute.</p>
+    </main>
+  </div>
 
   <script src="/assets/app.js"></script>
 </body>
