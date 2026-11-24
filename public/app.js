@@ -334,6 +334,16 @@ function statusPill(v) {
   if (lvl === 'warn') return '<span class="status-pill status-warn"><span class="dot"></span>Warning</span>';
   return '<span class="status-pill status-online"><span class="dot"></span>Online</span>';
 }
+// Open / Closed by the venue's hours (ALERT_HOURS in the venue's own time zone,
+// the same window the alert texts use). Live view only.
+function hoursPill(v) {
+  const h = v.hours;
+  if (!h) return '';
+  const span = h.start === h.end ? 'all day' : `${hourText(h.start)}–${hourText(h.end)}`;
+  const tip = `Hours ${span}, venue time (${h.tz.replace(/_/g, ' ')})`;
+  const note = h.start === h.end ? '' : h.open ? ` · till ${hourText(h.end)}` : ` · opens ${hourText(h.start)}`;
+  return `<span class="hours-pill ${h.open ? 'hours-open' : 'hours-closed'}" title="${esc(tip)}">${h.open ? 'Open' : 'Closed'}<span class="hours-note">${esc(note)}</span></span>`;
+}
 const forText = (ms) => ms == null ? '' : ' · for ' + agoShort(ms).replace(/ ago$/, '').replace('just now', '<1m');
 function alertsBlock(v) {
   const list = venueAlerts(v);
@@ -397,7 +407,7 @@ function card(v, sale) {
           ${v.event || v.digitalOnly ? `<div class="venue-event">${esc(v.event || '')}${v.digitalOnly ? `${v.event ? ' · ' : ''}<span class="digital-tag" title="No printers at this venue: printer alerts are hidden">Digital only</span>` : ''}</div>` : ''}
           ${weatherChip(v)}
         </div>
-        ${statusPill(v)}
+        <div class="pills">${statusPill(v)}${viewDate ? '' : hoursPill(v)}</div>
       </div>
       ${viewDate ? '' : alertsBlock(v)}
 

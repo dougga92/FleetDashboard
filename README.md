@@ -120,6 +120,12 @@ unknown until it reports again. On the Free plan the app stays awake only while
 venues post heartbeats; if every venue went dark at once, nothing would text
 (B1 + Always On fixes that).
 
+## Open / Closed
+
+Under each card's status pill: **Open · till 10 pm** or **Closed · opens 5 pm**, from
+`ALERT_HOURS` (default `17-22`) in the venue's own time zone (`VENUE_TZ`), the same
+window the alert texts use. Hover shows the hours and time zone. Live view only.
+
 ## Digital-only venues
 
 `DIGITAL_ONLY` (comma-separated, matched on part of the venue name; default

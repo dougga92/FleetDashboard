@@ -139,7 +139,8 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       const ageSec = Math.round((now - v.receivedAt) / 1000);
       return { ...v, ageSec, inTotals: inTotals(v), dayCount: Array.isArray(days) ? days.length : 0, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
                serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS,
-               remoteUpdate: updater.statusFor(venueKey(v), now), canUpdate: updater.eligible(v) };
+               remoteUpdate: updater.statusFor(venueKey(v), now), canUpdate: updater.eligible(v),
+               hours: notifier.venueHours(String(v.venue || v.machineId || ''), now) };
     })
     .sort((a, b) => String(a.venue || '').localeCompare(String(b.venue || '')));
 

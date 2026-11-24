@@ -169,4 +169,9 @@ function status() {
   };
 }
 
-module.exports = { check, status, sendText, inWindow, activeFor, enabled, cfg };
+// For the board's Open / Closed pill: same hours and time zones as the texts.
+function venueHours(venue, now = Date.now()) {
+  return { open: inWindow(venue, now), start: cfg.hours.start, end: cfg.hours.end, tz: tzFor(venue) };
+}
+
+module.exports = { check, status, sendText, inWindow, venueHours, activeFor, enabled, cfg };
