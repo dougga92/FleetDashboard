@@ -334,16 +334,29 @@ function statusPill(v) {
   if (lvl === 'warn') return '<span class="status-pill status-warn"><span class="dot"></span>Warning</span>';
   return '<span class="status-pill status-online"><span class="dot"></span>Online</span>';
 }
-// Open / Closed by the venue's hours (ALERT_HOURS in the venue's own time zone,
-// the same window the alert texts use). Live view only.
+// Open / Closed. Hours come from the venue's own schedule (EventPhotos alert_hours,
+// sent as `operating`) or, for older builds, the dashboard default (ALERT_HOURS in the
+// venue's time zone). The server works it out (same rule the alert texts use).
+const hm = (h) => { h = Number(h); const m = Math.round((h % 1) * 60), H = Math.floor(h) % 24;
+  if (!m) return hourText(Math.floor(h)); return `${(H % 12) || 12}:${String(m).padStart(2, '0')} ${H < 12 ? 'am' : 'pm'}`; };
+function dayWord(ymd) {
+  const d = new Date(ymd + 'T12:00:00'), t = new Date(); t.setHours(12, 0, 0, 0);
+  const diff = Math.round((d - t) / 864e5);
+  return diff === 1 ? 'tomorrow' : d.toLocaleDateString([], diff < 7 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
+}
 function hoursPill(v) {
   const h = v.hours;
   if (!h) return '';
-  const span = h.start === h.end ? 'all day' : `${hourText(h.start)}–${hourText(h.end)}`;
-  const tip = `Hours ${span}, venue time (${h.tz.replace(/_/g, ' ')})`;
-  const note = h.start === h.end ? '' : h.open ? ` · till ${hourText(h.end)}` : ` · opens ${hourText(h.start)}`;
-  return `<span class="hours-pill ${h.open ? 'hours-open' : 'hours-closed'}" title="${esc(tip)}">${h.open ? 'Open' : 'Closed'}<span class="hours-note">${esc(note)}</span></span>`;
+  const range = (x) => x ? `${hm(x[0])}–${hm(x[1])}` : 'closed';
+  let note = '';
+  if (h.open && h.today) note = ` · till ${hm(h.today[1])}`;
+  else if (!h.open && h.later && h.today) note = ` · opens ${hm(h.today[0])}`;
+  else if (!h.open && h.next && validH(h.next.hours)) note = ` · opens ${dayWord(h.next.date)} ${hm(h.next.hours[0])}`;
+  const src = h.source === 'venue' ? (h.custom ? 'venue schedule' : 'venue default') : 'dashboard default · venue not sending hours yet';
+  const tip = `${h.today !== undefined ? 'Today ' + range(h.today) + ', ' : ''}venue time (${h.tz.replace(/_/g, ' ')}) · ${src}`;
+  return `<span class="hours-pill ${h.open ? 'hours-open' : 'hours-closed'}${h.source === 'venue' ? '' : ' hours-default'}" title="${esc(tip)}">${h.open ? 'Open' : 'Closed'}<span class="hours-note">${esc(note)}</span></span>`;
 }
+const validH = (x) => Array.isArray(x) && x.length === 2;
 const forText = (ms) => ms == null ? '' : ' · for ' + agoShort(ms).replace(/ ago$/, '').replace('just now', '<1m');
 function alertsBlock(v) {
   const list = venueAlerts(v);

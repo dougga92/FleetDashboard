@@ -123,7 +123,7 @@ async function check(fleet, now = Date.now()) {
     const seen = new Set();
     for (const [vKey, v] of fleet) {
       const name = venueName(v);
-      const open = inWindow(name, now);
+      const open = isOpen(v, now);
       for (const a of activeFor(v, now, vKey)) {
         if (!textable(a)) continue;
         const id = `${vKey}|${a.key}`;
@@ -169,9 +169,45 @@ function status() {
   };
 }
 
-// For the board's Open / Closed pill: same hours and time zones as the texts.
-function venueHours(venue, now = Date.now()) {
-  return { open: inWindow(venue, now), start: cfg.hours.start, end: cfg.hours.end, tz: tzFor(venue) };
+// Venue-local date + fractional hour (e.g. 21.5 = 9:30 pm) in the venue's time zone.
+function localParts(venue, now) {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tzFor(venue), year: 'numeric', month: '2-digit',
+      day: '2-digit', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(now).map(x => [x.type, x.value]));
+    return { date: `${p.year}-${p.month}-${p.day}`, hour: (Number(p.hour) % 24) + Number(p.minute) / 60 };
+  } catch { const d = new Date(now); return { date: d.toISOString().slice(0, 10), hour: d.getHours() + d.getMinutes() / 60 }; }
 }
+const validHours = (h) => Array.isArray(h) && h.length === 2 && Number.isFinite(Number(h[0])) && Number.isFinite(Number(h[1])) && Number(h[1]) > Number(h[0]);
 
-module.exports = { check, status, sendText, inWindow, venueHours, activeFor, enabled, cfg };
+// Is the venue open, and what are its hours? Prefers the venue's own schedule
+// (heartbeat `operating`, EventPhotos alert_hours, 1.3.51+):
+//   { open, date:"YYYY-MM-DD", today:[open,close]|null, next:{date,hours}|null, custom }
+// `today` is checked against the venue's local clock NOW (so a venue that has gone
+// dark still opens/closes on time); if its `date` is no longer today we fall back
+// to `next` (when it is today) or the last `open` it sent while still fresh.
+// No `operating` (older builds): ALERT_HOURS in VENUE_TZ, the old rule.
+const FRESH_MS = 10 * 60e3;
+function venueHours(v, now = Date.now()) {
+  const name = String(v.venue || v.machineId || '');
+  const op = v.operating && typeof v.operating === 'object' ? v.operating : null;
+  const tz = tzFor(name);
+  if (op && typeof op.date === 'string') {
+    const { date, hour } = localParts(name, now);
+    let today;
+    if (op.date === date) today = validHours(op.today) ? op.today.map(Number) : null;
+    else if (op.next && op.next.date === date && validHours(op.next.hours)) today = op.next.hours.map(Number);
+    else if (now - v.receivedAt <= FRESH_MS && typeof op.open === 'boolean') {
+      return { source: 'venue', open: op.open, today: null, next: op.next || null, custom: !!op.custom, tz };
+    } else today = undefined;   // stale and unknown: fall through to the default window
+    if (today !== undefined) {
+      const open = !!today && hour >= today[0] && hour < today[1];
+      const later = today && hour < today[0];
+      return { source: 'venue', open, today, later: !!later, next: open || later ? null : (op.next && op.next.date > date ? op.next : null), custom: !!op.custom, tz };
+    }
+  }
+  const { start, end } = cfg.hours;
+  return { source: 'default', open: inWindow(name, now), today: [start, end], later: localHour(name, now) < start, next: null, custom: false, tz };
+}
+const isOpen = (v, now) => venueHours(v, now).open;
+
+module.exports = { check, status, sendText, inWindow, venueHours, isOpen, activeFor, enabled, cfg };

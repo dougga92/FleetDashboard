@@ -122,9 +122,19 @@ venues post heartbeats; if every venue went dark at once, nothing would text
 
 ## Open / Closed
 
-Under each card's status pill: **Open · till 10 pm** or **Closed · opens 5 pm**, from
-`ALERT_HOURS` (default `17-22`) in the venue's own time zone (`VENUE_TZ`), the same
-window the alert texts use. Hover shows the hours and time zone. Live view only.
+Under each card's status pill: **Open · till 9:30 pm**, **Closed · opens 6 pm**, or
+**Closed · opens Fri 6 pm**. Venues on EventPhotos 1.3.51+ send their own schedule
+(Owner → Settings → Trouble Alerts → Operating hours, `alert_hours`) as:
+
+    operating: { open, date: "YYYY-MM-DD", today: [open, close] | null,
+                 next: { date, hours: [open, close] } | null, custom }
+
+(venue-local date; hours 24h, may be fractional, 21.5 = 9:30 pm; `today` null =
+closed today; `next` = next opening after today). The board checks `today` against
+the venue's local clock now (time zone from `VENUE_TZ`), so a dark venue still
+opens and closes on time. Older builds fall back to `ALERT_HOURS` (default `17-22`)
+in the venue's time zone; the pill is dashed and the tooltip says so. The alert
+texts use the same open/closed answer. Live view only.
 
 ## Digital-only venues
 
