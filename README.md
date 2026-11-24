@@ -120,6 +120,13 @@ unknown until it reports again. On the Free plan the app stays awake only while
 venues post heartbeats; if every venue went dark at once, nothing would text
 (B1 + Always On fixes that).
 
+## Digital-only venues
+
+`DIGITAL_ONLY` (comma-separated, matched on part of the venue name; default
+`California`) lists venues with no printers. Their `printers` and `printAgent`
+alerts are dropped at ingest (not on the board, never texted), and the card shows
+"Digital only" next to the event. All other alerts still show.
+
 ## Weather
 
 Venues on EventPhotos 1.3.44+ with a weather location send `weather: { category,

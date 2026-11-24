@@ -40,6 +40,13 @@ const STARTED_AT = Date.now();
 // AJ's Waltz Photo, which gives prints/digitals away for toy donations.
 const TOTALS_EXCLUDE = (process.env.TOTALS_EXCLUDE ?? 'Waltz Photo').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const inTotals = (v) => !TOTALS_EXCLUDE.some(x => String(v.venue || '').toLowerCase().includes(x));
+// Digital-only venues (no printers at all). Their printer / print-agent alerts
+// ("No active printers configured", "Print agent never started") are expected, so
+// they're dropped at ingest: not shown on the board, never texted. Comma-separated,
+// case-insensitive match on the venue name. Default: California.
+const DIGITAL_ONLY = (process.env.DIGITAL_ONLY ?? 'California').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const PRINT_ALERT_KEYS = new Set(['printers', 'printAgent']);
+const isDigitalOnly = (v) => DIGITAL_ONLY.some(x => String(v.venue || '').toLowerCase().includes(x));
 
 // Sales tax. Venue prices INCLUDE tax (Doug), so `revenue` is what customers paid.
 // A venue sends its own rate as top-level `taxRate` (percent, e.g. 7 or 8.25) and,
@@ -106,7 +113,9 @@ app.post('/api/heartbeat', (req, res) => {
   }
   const p = req.body || {};
   if (!p.machineId && !p.venue) return res.status(400).json({ error: 'missing venue identity' });
-  fleet.set(venueKey(p), { ...p, receivedAt: Date.now() });
+  const digitalOnly = isDigitalOnly(p);
+  const alerts = digitalOnly && Array.isArray(p.alerts) ? p.alerts.filter(a => !(a && PRINT_ALERT_KEYS.has(a.key))) : p.alerts;
+  fleet.set(venueKey(p), { ...p, alerts, digitalOnly, receivedAt: Date.now() });
   trackAcsSends(venueKey(p), p);
   const update = updater.onHeartbeat(venueKey(p), p);   // only while an update is pending for this venue
   res.json(update ? { ok: true, update } : { ok: true });

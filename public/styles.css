@@ -400,3 +400,4 @@ button.ver:disabled { opacity: .7; cursor: default; }
 .fly { margin-bottom: 6px; }
 .rail { z-index: 26; }   /* sticky = own stacking context; must sit above the scrim so its fly-out panel does */
 .rail .daybar { flex-wrap: wrap; } .rail .daybar .day-live { order: 5; flex-basis: 100%; }
+.digital-tag { color: var(--blue); font-weight: 600; }

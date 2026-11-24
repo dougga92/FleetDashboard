@@ -394,7 +394,7 @@ function card(v, sale) {
         <span class="drag-handle" title="Drag to reorder" aria-label="Drag to reorder">⠿</span>
         <div class="card-title">
           <div class="venue-name">${esc(v.venue || 'Unknown venue')}</div>
-          ${v.event ? `<div class="venue-event">${esc(v.event)}</div>` : ''}
+          ${v.event || v.digitalOnly ? `<div class="venue-event">${esc(v.event || '')}${v.digitalOnly ? `${v.event ? ' · ' : ''}<span class="digital-tag" title="No printers at this venue: printer alerts are hidden">Digital only</span>` : ''}</div>` : ''}
           ${weatherChip(v)}
         </div>
         ${statusPill(v)}
