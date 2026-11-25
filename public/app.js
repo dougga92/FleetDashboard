@@ -284,6 +284,25 @@ function versionTag(v) {
   return `<span class="ver-wrap"><span class="ver ${cls}" title="${esc(note)}">${esc(text)}</span><button type="button" class="ver-btn" data-upd="${esc(k)}" data-act="update" title="Pull GitHub main on this venue (restarts it for a few minutes)">Update</button></span>`;
 }
 let remoteUpdateMin = null;
+
+// FotoPrint (the print exe) version, from the heartbeat's `fotoprint` field
+// (EventPhotos 1.3.52+): { version, found, runs, supportsPage }. Newest reported
+// version counts as latest. Hidden for digital-only venues (no printing there).
+let latestFotoprint = null;
+function fotoprintTag(v) {
+  if (v.digitalOnly) return '';
+  const f = v.fotoprint;
+  if (!f || typeof f !== 'object') return '<span class="ver ver-unknown fp" title="FotoPrint version not reported (venue needs EventPhotos 1.3.52+)">FotoPrint ?</span>';
+  if (!f.found) return '<span class="ver ver-bad fp" title="FotoPrint.exe not found on the venue server">FotoPrint missing</span>';
+  if (f.runs === false) return '<span class="ver ver-bad fp" title="FotoPrint.exe is installed but would not run (blocked by App Control, or not trusted)">FotoPrint won\'t run</span>';
+  const ver = f.version;
+  const behind = ver && latestFotoprint && cmpVersion(ver, latestFotoprint) < 0;
+  const noPage = f.supportsPage === false;
+  let note = !ver ? 'FotoPrint version unknown' : behind ? `Behind: newest in the fleet is v${latestFotoprint}` : 'Newest FotoPrint in the fleet';
+  if (noPage) note += ' · too old for --page (pre-0.5.0): every print will fail, use Update FotoPrint on the venue';
+  const cls = noPage ? 'ver-bad' : behind ? 'ver-old' : ver ? 'ver-ok' : 'ver-unknown';
+  return `<span class="ver ${cls} fp" title="${esc(note)}">FotoPrint ${ver ? 'v' + esc(ver) : '?'}</span>`;
+}
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-upd]');
   if (!b) return;
@@ -455,7 +474,7 @@ function card(v, sale) {
       <div class="card-foot">
         ${machinesRow(v)}
         <span class="meta">${v.online ? 'updated ' + ago(v.ageSec) : 'last seen ' + ago(v.ageSec)}</span>
-        ${versionTag(v)}
+        <span class="vers">${versionTag(v)}${fotoprintTag(v)}</span>
       </div>
     </div>`;
 }
@@ -471,6 +490,7 @@ async function tick() {
     lastSummary = data.summary;
     notifierState = data.notifier || null;
     latestVersion = data.venues.map(v => v.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
+    latestFotoprint = data.venues.map(v => v.fotoprint && v.fotoprint.version).filter(Boolean).reduce((m, x) => (!m || cmpVersion(x, m) > 0 ? x : m), null);
     detectSales(data.venues);           // sales + sound always follow the live numbers
     if (Date.now() - historyAt > HISTORY_MS || data.venues.some(v => v.dayCount && !venueHistory.has(keyOf(v)))) loadHistory();
     renderView();

@@ -120,6 +120,17 @@ unknown until it reports again. On the Free plan the app stays awake only while
 venues post heartbeats; if every venue went dark at once, nothing would text
 (B1 + Always On fixes that).
 
+## FotoPrint version
+
+Each card shows the venue's FotoPrint (print exe) version under its EventPhotos
+version, from the heartbeat field `fotoprint` (EventPhotos 1.3.52+):
+
+    fotoprint: { version: "0.5.2" | null, found: bool, runs: bool, supportsPage: bool | null }
+
+Green = newest any venue reports; amber = behind it; red = missing, won't run, or too
+old for `--page` (pre-0.5.0, every print fails). Dashed "FotoPrint ?" = the venue
+doesn't report it yet. Hidden for digital-only venues.
+
 ## Open / Closed
 
 Under each card's status pill: **Open · till 9:30 pm**, **Closed · opens 6 pm**, or
