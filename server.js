@@ -159,6 +159,10 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const reporting = venues.filter(v => v.online);
   const todayEmails    = sum(v => countOf(v.today && v.today.emails), reporting);
   const todayEmailsAcs = sum(v => countOf(v.today && v.today.emailsAcs), reporting);
+  // Emails for each venue's current event (all days, eventTotals.emails), every
+  // venue: emails are real sends whatever the money totals leave out.
+  const withEventAll = venues.filter(v => v.eventTotals);
+  const eventEmails  = sum(v => countOf(v.eventTotals.emails), withEventAll);
 
   // ACS hourly gauge: ACS sends across the whole fleet in the last 60 minutes
   // (demo venues included: their test sends use the real quota).
@@ -192,6 +196,8 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       eventVenues:   withEvent.length,
       todayEmails,
       todayEmailsAcs,
+      eventEmails,
+      eventEmailVenues: withEventAll.length,
       acsHour,
       acsCap:        ACS_HOURLY_EMAIL_CAP,
       acsSince,

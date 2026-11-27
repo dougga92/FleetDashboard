@@ -98,8 +98,8 @@ function renderSummary(s) {
       sub: `no tax · ${s.todayOrders} order${s.todayOrders === 1 ? '' : 's'}${exclNote(s.excluded)}${taxMissNote(s.taxMissing)}` },
     { label: 'Tax today', value: money(s.todayTax), cls: '',
       sub: `all events ${money(s.eventTax)}${exclNote(s.excluded)}` },
-    { label: 'Emails sent today (fleet)', value: num(s.todayEmails), cls: '',
-      sub: `${num(s.todayEmailsAcs)} via ACS · reporting venues` },
+    { label: 'Emails sent to date', value: num(s.eventEmails), cls: '',
+      sub: `all events · ${s.eventEmailVenues} venue${s.eventEmailVenues === 1 ? '' : 's'} · today ${num(s.todayEmails)} (${num(s.todayEmailsAcs)} via ACS)` },
     { label: 'ACS hourly cap', value: `${num(s.acsHour)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
       sub: `${s.acsPct}% · ` + (s.acsSince
         ? 'since ' + new Date(s.acsSince).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' (restart)'
