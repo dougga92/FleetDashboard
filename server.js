@@ -167,9 +167,10 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   // venue: emails are real sends whatever the money totals leave out.
   const withEventAll = venues.filter(v => v.eventTotals);
   const eventEmails  = sum(v => countOf(v.eventTotals.emails), withEventAll);
-  // Every date added together: each venue's days[] sum (older builds without
-  // days[] fall back to their current-event count).
-  const allEmails = sum(v => v.allEmails !== null ? v.allEmails : countOf(v.eventTotals && v.eventTotals.emails));
+  // Every date added together: each venue's days[] sum, but never less than its
+  // current-event count (days[] only counts the email_sends log, which venues
+  // started keeping after some event emails had already gone out).
+  const allEmails = sum(v => Math.max(v.allEmails || 0, countOf(v.eventTotals && v.eventTotals.emails)));
   const allEmailsSince = venues.reduce((m, v) => (v.emailsSince && (!m || v.emailsSince < m) ? v.emailsSince : m), null);
 
   // ACS hourly gauge: ACS sends across the whole fleet in the last 60 minutes
