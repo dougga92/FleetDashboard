@@ -137,7 +137,11 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const venues = [...fleet.values()]
     .map(({ days, ...v }) => {           // days[] is served by /api/history, not every 10 s poll
       const ageSec = Math.round((now - v.receivedAt) / 1000);
-      return { ...v, ageSec, inTotals: inTotals(v), dayCount: Array.isArray(days) ? days.length : 0, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
+      // Emails across every date the venue reports (days[]: up to its last 120 days).
+      const dd = Array.isArray(days) ? days : [];
+      const allEmails = dd.length ? dd.reduce((t, d) => t + countOf(d && d.emails), 0) : null;
+      const emailsSince = dd.reduce((m, d) => (d && d.date && (!m || d.date < m) ? d.date : m), null);
+      return { ...v, ageSec, inTotals: inTotals(v), allEmails, emailsSince, dayCount: dd.length, online: (now - v.receivedAt) < OFFLINE_AFTER_MS,
                serverFresh: (now - v.receivedAt) <= SERVER_FRESH_MS,
                remoteUpdate: updater.statusFor(venueKey(v), now), canUpdate: updater.eligible(v),
                hours: notifier.venueHours(v, now) };
@@ -163,6 +167,10 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   // venue: emails are real sends whatever the money totals leave out.
   const withEventAll = venues.filter(v => v.eventTotals);
   const eventEmails  = sum(v => countOf(v.eventTotals.emails), withEventAll);
+  // Every date added together: each venue's days[] sum (older builds without
+  // days[] fall back to their current-event count).
+  const allEmails = sum(v => v.allEmails !== null ? v.allEmails : countOf(v.eventTotals && v.eventTotals.emails));
+  const allEmailsSince = venues.reduce((m, v) => (v.emailsSince && (!m || v.emailsSince < m) ? v.emailsSince : m), null);
 
   // ACS hourly gauge: ACS sends across the whole fleet in the last 60 minutes
   // (demo venues included: their test sends use the real quota).
@@ -197,6 +205,8 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       todayEmails,
       todayEmailsAcs,
       eventEmails,
+      allEmails,
+      allEmailsSince,
       eventEmailVenues: withEventAll.length,
       acsHour,
       acsCap:        ACS_HOURLY_EMAIL_CAP,
