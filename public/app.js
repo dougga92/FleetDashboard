@@ -1129,24 +1129,27 @@ function renderMail() {
   const hint = $('mail-hint'), body = $('mail-body'), sumEl = $('mail-sum');
   if (!hint || !body) return;
   const d = mailData;
-  if (!d || (!d.total && !d.lastEventAt)) {
-    hint.textContent = 'Waiting for Azure events';
+  if (!d || !d.total) {
+    hint.textContent = d && d.venuesReporting ? 'No emails in the last 7 days' : 'Waiting for venue or Azure reports';
     sumEl.textContent = '';
-    body.innerHTML = '<p class="muted mail-empty">No delivery results yet. They arrive from Azure (Event Grid) as emails are sent; a dashboard restart starts this list empty.</p>';
+    body.innerHTML = '<p class="muted mail-empty">No email results yet. Venues on the newest EventPhotos report their recent emails in the heartbeat; Azure (ACS) results arrive through Event Grid. A dashboard restart clears the Azure part.</p>';
     return;
   }
   const l = d.last24;
-  hint.innerHTML = `24h customers: <b>${num(l.customerDelivered)}</b> delivered · <b class="${l.customerFailed ? 'mail-bad' : ''}">${num(l.customerFailed)}</b> failed`;
-  sumEl.innerHTML = `Last 24h, all recipients: ${num(l.delivered)} delivered · ${num(l.failed)} failed`;
+  hint.innerHTML = `24h customers: <b>${num(l.customerDelivered)}</b> sent · <b class="${l.customerFailed ? 'mail-bad' : ''}">${num(l.customerFailed)}</b> failed${l.customerWaiting ? ` · ${num(l.customerWaiting)} waiting` : ''}`;
+  sumEl.innerHTML = `Last 24h, all recipients: ${num(l.delivered)} sent/delivered · ${num(l.failed)} failed or bounced · ${num(l.waiting)} waiting · ${d.venuesReporting} venue${d.venuesReporting === 1 ? '' : 's'} reporting`;
   const failOnly = $('mail-fail-only').checked, hideCopies = $('mail-hide-copies').checked;
   const list = d.rows.filter(r => (!failOnly || !r.ok) && (!hideCopies || !r.copy));
   if (!list.length) { body.innerHTML = '<p class="muted mail-empty">Nothing to show with these filters.</p>'; return; }
-  body.innerHTML = `<table class="mail-table"><thead><tr><th>Time</th><th>Result</th><th>To</th><th>From</th><th>Reason</th></tr></thead><tbody>${
-    list.map(r => `<tr class="${r.ok ? '' : 'mail-row-bad'}">
+  const pill = (r) => r.ok ? 'mail-ok' : r.waiting ? 'mail-wait' : 'mail-fail';
+  const where = (r) => r.source === 'acs' ? String(r.sender || '').split('@')[0] + ' <span class="mail-src">Azure</span>' : esc(String(r.venue || '').split(' - ')[0]) + (r.provider ? ` <span class="mail-src">${r.provider === 'm365' ? 'M365' : esc(r.provider.toUpperCase())}</span>` : '');
+  body.innerHTML = `<table class="mail-table"><thead><tr><th>Time</th><th>Result</th><th>Venue</th><th>To</th><th>Order</th><th>Reason</th></tr></thead><tbody>${
+    list.map(r => `<tr class="${r.ok || r.waiting ? '' : 'mail-row-bad'}">
       <td class="nowrap">${esc(ET(r.at))}</td>
-      <td><span class="mail-pill ${r.ok ? 'mail-ok' : 'mail-fail'}">${r.ok ? 'Delivered' : esc(r.status)}</span>${r.copy ? ' <span class="mail-copy">copy</span>' : ''}</td>
+      <td><span class="mail-pill ${pill(r)}">${esc(r.status)}</span>${r.copy ? ' <span class="mail-copy">copy</span>' : ''}${r.attempts > 1 ? ` <span class="mail-copy">${r.attempts} tries</span>` : ''}</td>
+      <td class="nowrap">${where(r)}</td>
       <td class="mail-addr">${esc(r.recipient)}</td>
-      <td class="mail-addr">${esc(String(r.sender || '').split('@')[0])}</td>
+      <td>${r.orderId != null ? '#' + esc(String(r.orderId)) : ''}</td>
       <td class="mail-reason">${r.ok ? '' : esc(r.reason || '')}</td></tr>`).join('')
   }</tbody></table>`;
 }

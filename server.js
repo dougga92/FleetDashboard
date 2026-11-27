@@ -234,7 +234,7 @@ const MAX_DAYS = 120;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Email delivery results pushed by Event Grid from ACS (see mailEvents.js).
 app.post('/api/acs-events', express.json({ type: ['application/json', 'application/cloudevents+json'], limit: '1mb' }), mailEvents.handler);
-app.get('/api/mail', dashAuth, (_req, res) => res.json(mailEvents.snapshot()));
+app.get('/api/mail', dashAuth, (_req, res) => res.json(mailEvents.snapshot(Date.now(), [...fleet.values()])));
 
 app.get('/api/history', dashAuth, (_req, res) => {
   const venues = [...fleet.values()].map(v => ({

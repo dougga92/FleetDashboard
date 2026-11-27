@@ -424,6 +424,8 @@ button.ver:disabled { opacity: .7; cursor: default; }
 .mail-pill { font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
 .mail-ok { color: #052e16; background: var(--green); }
 .mail-fail { color: #fff; background: var(--red); }
+.mail-wait { color: #1c1404; background: var(--amber); }
+.mail-src { font-size: 0.68rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .mail-copy { font-size: 0.7rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
 .mail-bad { color: var(--red); }
 .mail-empty { padding: 8px 0; }

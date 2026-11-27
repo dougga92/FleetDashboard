@@ -122,7 +122,15 @@ venues post heartbeats; if every venue went dark at once, nothing would text
 
 ## Email delivery (ACS → Event Grid)
 
-The rail's **Email delivery** fly-out lists every recipient's latest delivery result
+The rail's **Email delivery** fly-out merges two sources:
+
+- **Venues (M365 era):** each venue's heartbeat field `mailLog` (EventPhotos, next
+  patch after 1.3.6x): `{ items: [{ at, orderId, to (MASKED, e.g. a***@me.com),
+  provider, status: sent|pending|retrying|failed|bounced, attempts, reason }] }`,
+  last 24 h, ≤ 200 rows. Bounces come from the mailbox's NDRs; no bounce = delivered.
+- **Azure (ACS):** Event Grid results, below.
+
+For ACS it lists every recipient's latest delivery result
 (Delivered / Failed / Bounced / Suppressed …, with the SMTP reason), times in Eastern,
 plus 24-hour customer counts on the launcher. Our own CC/BCC copies
 (`MAIL_COPY_DOMAINS`, default eventphotoprinters.com) are hidden by default.
