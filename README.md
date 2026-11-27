@@ -11,25 +11,14 @@ EventPhotos repo); this app keeps the latest per venue and shows them live.
   so a restart repopulates within a minute. See *Persisting history* below to add
   Azure Table Storage later.
 
-## Emails and the ACS hourly cap
+## Emails
 
-Heartbeats carry `today.emails` (every send, ACS + Microsoft 365) and
-`today.emailsAcs` (ACS sends only). The board shows the fleet sum of `emails`
-today and each venue's `emails`. Offline venues and older builds without the
-fields count as 0.
-
-The ACS limit is **per hour**, so the gauge shows ACS sends across the fleet in
-the last 60 minutes against `ACS_HOURLY_EMAIL_CAP` (app setting, default 100):
-amber from 70%, red from 90%. Venues only send a running daily count, so the
-dashboard works out each hour's sends from how much `emailsAcs` rises between
-heartbeats (in memory). For the first hour after a restart it covers only the
-time since the restart, and says so.
-
-Change the cap without a code change:
-
-```bash
-az webapp config appsettings set -n fotomentum-fleet -g dougga_rg_6763 --settings ACS_HOURLY_EMAIL_CAP=100
-```
+Heartbeats carry `today.emails` (every send). The board shows the fleet sum of
+`emails` today, an all-dates total (each venue's `days[]` sum, never below its
+current-event count) and each venue's `emails`. Offline venues and older builds
+without the fields count as 0. The fleet sends through one Microsoft 365 mailbox
+(ACS was retired 2026-11-27); each venue paces itself with
+`EMAIL_MIN_SEND_INTERVAL_MS=15000` so 7 venues stay under the mailbox's ~30/min.
 
 ## Machine status row (S / P / K)
 
@@ -120,28 +109,16 @@ unknown until it reports again. On the Free plan the app stays awake only while
 venues post heartbeats; if every venue went dark at once, nothing would text
 (B1 + Always On fixes that).
 
-## Email delivery (ACS → Event Grid)
+## Email delivery
 
-The rail's **Email delivery** fly-out merges two sources:
-
-- **Venues (M365 era):** each venue's heartbeat field `mailLog` (EventPhotos, next
-  patch after 1.3.6x): `{ items: [{ at, orderId, to (MASKED, e.g. a***@me.com),
-  provider, status: sent|pending|retrying|failed|bounced, attempts, reason }] }`,
-  last 24 h, ≤ 200 rows. Bounces come from the mailbox's NDRs; no bounce = delivered.
-- **Azure (ACS):** Event Grid results, below.
-
-For ACS it lists every recipient's latest delivery result
-(Delivered / Failed / Bounced / Suppressed …, with the SMTP reason), times in Eastern,
-plus 24-hour customer counts on the launcher. Our own CC/BCC copies
-(`MAIL_COPY_DOMAINS`, default eventphotoprinters.com) are hidden by default.
-
-Azure pushes the results: on the **eventphotos-com-service** Communication Services
-resource → Events → + Event Subscription, event type **Email Delivery Report Received**,
-schema **Event Grid Schema**, endpoint **Web Hook**
-`https://fotomentum-fleet.azurewebsites.net/api/acs-events` (add `?key=<ACS_EVENTS_KEY>`
-if that app setting is set). Only events whose topic contains `ACS_RESOURCE_NAME`
-(default eventphotos-com-service) are accepted. In memory, last 7 days / 2000 rows:
-a restart starts the list empty.
+The rail's **Email delivery** fly-out lists each email from every venue's heartbeat
+field `mailLog` (EventPhotos, next patch after 1.3.6x):
+`{ items: [{ at, orderId, to (MASKED, e.g. a***@me.com), provider,
+status: sent|pending|retrying|failed|bounced, attempts, reason }] }`, last 24 h,
+≤ 200 rows per venue. "Sent" = Microsoft 365 accepted it and no bounce (NDR) came
+back. Times in Eastern; 24-hour customer counts on the launcher; our own copies
+(`MAIL_COPY_DOMAINS`, default eventphotoprinters.com) hidden by default. Look up the
+full address in the venue app by order #.
 
 ## FotoPrint version
 
@@ -319,7 +296,7 @@ also sends `today.date`, its own local date). Same money rules as `today`
 "today": { "date": "2026-11-22", "orders": 20, "...": "..." },
 "days": [
   { "date": "2026-11-21", "event": "Light The Park", "orders": 43, "revenue": 1697.69,
-    "photos": 430, "emails": 46, "emailsAcs": 43, "sales": { "...": "same shape as today.sales" } }
+    "photos": 430, "emails": 46, "sales": { "...": "same shape as today.sales" } }
 ]
 ```
 
@@ -340,7 +317,7 @@ All events to date, Avg per order, Today's revenue, the past-day tiles and the
 Night by night fleet chart. AJ's Waltz Photo gives prints and digitals away for
 toy donations, so its numbers would skew the totals. Its own card (marked "not in fleet
 totals"), its Compare bars and its night-by-night mini chart still show its
-sales. Emails still count (the ACS quota is shared). Set `TOTALS_EXCLUDE=` (empty)
+sales. Emails still count (real sends). Set `TOTALS_EXCLUDE=` (empty)
 to count every venue.
 
 ## RustDesk IDs

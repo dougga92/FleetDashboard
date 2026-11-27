@@ -13,7 +13,7 @@ const path = require('path');
 const APP_VERSION = require('./package.json').version;
 const notifier = require('./notifier');   // texts on-call for critical alerts + dark venues
 const updater = require('./updater');           // remote "update now" over the heartbeat reply
-const mailEvents = require('./mailEvents');     // ACS email delivery results via Event Grid
+const mailEvents = require('./mailEvents');     // per-email delivery log from venue heartbeats
 
 const app = express();
 app.set('trust proxy', true);
@@ -29,13 +29,6 @@ const OFFLINE_AFTER_MS = (Number(process.env.OFFLINE_AFTER_SEC) || 150) * 1000; 
 // venue's own sentAt, so a venue PC with a drifting clock can't show a false red.
 const SERVER_FRESH_MS = (Number(process.env.SERVER_FRESH_SEC) || 120) * 1000;
 const PORT = process.env.PORT || 3000;
-// Azure Communication Services email send limit, for the ACS gauge. It is an
-// HOURLY limit (default 100 emails/hour). Change it here or with the
-// ACS_HOURLY_EMAIL_CAP app setting (no code change needed).
-const ACS_HOURLY_EMAIL_CAP = Number(process.env.ACS_HOURLY_EMAIL_CAP) > 0 ? Number(process.env.ACS_HOURLY_EMAIL_CAP) : 100;
-// ACS meters a ROLLING hour. ACS_WINDOW_SEC exists only to test the roll-off locally.
-const HOUR_MS = (Number(process.env.ACS_WINDOW_SEC) || 3600) * 1000;
-const STARTED_AT = Date.now();
 // Venues left out of the fleet money totals (their own card still shows their
 // sales). Comma-separated, case-insensitive match on the venue name. Default:
 // AJ's Waltz Photo, which gives prints/digitals away for toy donations.
@@ -71,41 +64,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const fleet = new Map();
 const venueKey = (p) => p.machineId || p.venue || 'unknown';
 
-// ── ACS sends in the last hour ───────────────────────────────────────────────
-// Venues only report a running "today" count (today.emailsAcs), but the ACS
-// limit is per hour. So we watch each venue's count rise between heartbeats and
-// keep those increments, timestamped, for an hour. A count that goes DOWN means
-// the venue's day rolled over, so the new value is all new sends. The first
-// heartbeat after a dashboard restart only sets the baseline, so for the first
-// hour after a restart the gauge covers just the time since the restart.
-// ACS counts a rolling hour, and so does this: each send drops off 60 minutes
-// after it was seen, so the number falls as time passes. Approximation: sends
-// are stamped when the heartbeat arrives (up to ~45 s after the actual send).
-const acsSends = new Map(); // venueKey -> { last, events: [{ t, n }] }
 const countOf = (n) => Math.max(0, Math.floor(Number(n) || 0));
-
-function trackAcsSends(key, p) {
-  const raw = p.today && p.today.emailsAcs;
-  if (raw == null || !Number.isFinite(Number(raw))) return; // older build: nothing to track
-  const now = Date.now();
-  const cur = countOf(raw);
-  const rec = acsSends.get(key) || { last: null, events: [] };
-  if (rec.last !== null) {
-    const inc = cur >= rec.last ? cur - rec.last : cur;
-    if (inc > 0) rec.events.push({ t: now, n: inc });
-  }
-  rec.last = cur;
-  rec.events = rec.events.filter(e => now - e.t < HOUR_MS);
-  acsSends.set(key, rec);
-}
-
-function acsLastHour(now) {
-  let total = 0;
-  for (const rec of acsSends.values()) {
-    for (const e of rec.events) if (now - e.t < HOUR_MS) total += e.n;
-  }
-  return total;
-}
 
 // ── Ingest: venues POST here ─────────────────────────────────────────────────
 app.post('/api/heartbeat', (req, res) => {
@@ -117,7 +76,6 @@ app.post('/api/heartbeat', (req, res) => {
   const digitalOnly = isDigitalOnly(p);
   const alerts = digitalOnly && Array.isArray(p.alerts) ? p.alerts.filter(a => !(a && PRINT_ALERT_KEYS.has(a.key))) : p.alerts;
   fleet.set(venueKey(p), { ...p, alerts, digitalOnly, receivedAt: Date.now() });
-  trackAcsSends(venueKey(p), p);
   const update = updater.onHeartbeat(venueKey(p), p);   // only while an update is pending for this venue
   res.json(update ? { ok: true, update } : { ok: true });
   notifier.check(fleet).catch(e => console.error('[alerts]', e));   // new critical alerts text right away
@@ -156,14 +114,12 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const counted = venues.filter(v => v.inTotals);
   const withEvent = counted.filter(v => v.eventTotals && !isDemo(v));
 
-  // Emails sent today. `emails` = every send (ACS + Microsoft 365); `emailsAcs` =
-  // ACS sends only. Both are one per send-API call. Stale (offline) venues and
+  // Emails sent today (`emails`, one per send-API call). Stale (offline) venues and
   // older builds that don't send the fields count as 0: a box that went quiet
   // keeps its last "today", which may be yesterday's by now. Each venue reports
   // its OWN local "today", so across US time zones the sum is an approximation.
   const reporting = venues.filter(v => v.online);
   const todayEmails    = sum(v => countOf(v.today && v.today.emails), reporting);
-  const todayEmailsAcs = sum(v => countOf(v.today && v.today.emailsAcs), reporting);
   // Emails for each venue's current event (all days, eventTotals.emails), every
   // venue: emails are real sends whatever the money totals leave out.
   const withEventAll = venues.filter(v => v.eventTotals);
@@ -174,14 +130,6 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
   const allEmails = sum(v => Math.max(v.allEmails || 0, countOf(v.eventTotals && v.eventTotals.emails)));
   const allEmailsSince = venues.reduce((m, v) => (v.emailsSince && (!m || v.emailsSince < m) ? v.emailsSince : m), null);
 
-  // ACS hourly gauge: ACS sends across the whole fleet in the last 60 minutes
-  // (demo venues included: their test sends use the real quota).
-  const acsHour = acsLastHour(now);
-  const acsPct = Math.round((acsHour / ACS_HOURLY_EMAIL_CAP) * 1000) / 10;
-  // normal < 70% of cap, warn 70–89%, bad >= 90%
-  const acsLevel = acsPct >= 90 ? 'bad' : acsPct >= 70 ? 'warn' : 'ok';
-  // Less than an hour since a restart: the window only goes back to the restart.
-  const acsSince = now - STARTED_AT < HOUR_MS ? new Date(STARTED_AT).toISOString() : null;
   // Fleet tax: venues that don't report tax yet count with tax in (listed in taxMissing).
   const taxSum = (pick, list) => round2(list.reduce((t, v) => t + (taxOf(pick(v), v) || 0), 0));
   const todayTax = taxSum(v => v.today, counted), eventTax = taxSum(v => v.eventTotals, withEvent);
@@ -205,16 +153,10 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
       eventOrders:   sum(v => v.eventTotals.orders, withEvent),
       eventVenues:   withEvent.length,
       todayEmails,
-      todayEmailsAcs,
       eventEmails,
       allEmails,
       allEmailsSince,
       eventEmailVenues: withEventAll.length,
-      acsHour,
-      acsCap:        ACS_HOURLY_EMAIL_CAP,
-      acsSince,
-      acsPct,
-      acsLevel,
     },
     offlineAfterSec: OFFLINE_AFTER_MS / 1000,
     generatedAt: new Date().toISOString(),
@@ -232,8 +174,6 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
 // resends the list every heartbeat, so a restart loses nothing once venues report.
 const MAX_DAYS = 120;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-// Email delivery results pushed by Event Grid from ACS (see mailEvents.js).
-app.post('/api/acs-events', express.json({ type: ['application/json', 'application/cloudevents+json'], limit: '1mb' }), mailEvents.handler);
 app.get('/api/mail', dashAuth, (_req, res) => res.json(mailEvents.snapshot(Date.now(), [...fleet.values()])));
 
 app.get('/api/history', dashAuth, (_req, res) => {

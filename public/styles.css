@@ -116,11 +116,6 @@ body {
 .event-total.muted { color: var(--muted); font-size: 0.8rem; }
 .event-money { font-size: 1.3rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 
-/* ACS daily-cap gauge */
-.meter { height: 6px; border-radius: 3px; background: var(--border); margin-top: 10px; overflow: hidden; }
-.meter-fill { height: 100%; border-radius: 3px; background: var(--green); }
-.meter-warn { background: var(--amber); }
-.meter-bad  { background: var(--red); }
 
 
 
@@ -328,7 +323,7 @@ button.ver:disabled { opacity: .7; cursor: default; }
 .rail .tile-label { margin: 0; font-size: 0.7rem; }
 .rail .tile-value { font-size: 1.35rem; text-align: right; white-space: nowrap; }
 .rail .tile-sub { grid-column: 1 / -1; font-size: 0.76rem; margin-top: 5px; line-height: 1.35; }
-.rail .tile > .meter, .rail .tile > .test-text { grid-column: 1 / -1; margin-top: 8px; }
+.rail .tile > .test-text { grid-column: 1 / -1; margin-top: 8px; }
 /* a thin status stripe on tiles that carry a level */
 .rail .tile:has(.tile-value.ok)::before, .rail .tile:has(.tile-value.warn)::before, .rail .tile:has(.tile-value.bad)::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--green);
@@ -425,7 +420,6 @@ button.ver:disabled { opacity: .7; cursor: default; }
 .mail-ok { color: #052e16; background: var(--green); }
 .mail-fail { color: #fff; background: var(--red); }
 .mail-wait { color: #1c1404; background: var(--amber); }
-.mail-src { font-size: 0.68rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .mail-copy { font-size: 0.7rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
 .mail-bad { color: var(--red); }
 .mail-empty { padding: 8px 0; }

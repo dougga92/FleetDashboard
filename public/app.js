@@ -63,20 +63,11 @@ function saleRate(orders, photos) {
   return pct.toFixed(1) + '%';
 }
 
-// Thin progress bar for the ACS gauge; level = ok | warn | bad (set by the server).
-function meter(m) {
-  const pct = Math.min(100, Math.max(0, Number(m.pct) || 0));
-  return `<div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
-        <div class="meter-fill meter-${esc(m.level)}" style="width:${pct}%"></div>
-      </div>`;
-}
-
 function renderTiles(tiles) {
   $('summary').innerHTML = tiles.map(t => `
     <div class="tile">
       <div class="tile-label">${t.label}</div>
       <div class="tile-value ${t.cls}">${esc(t.value)}</div>
-      ${t.meter ? meter(t.meter) : ''}
       <div class="tile-sub">${esc(t.sub)}</div>
       ${t.extra || ''}
     </div>`).join('');
@@ -99,12 +90,7 @@ function renderSummary(s) {
     { label: 'Tax today', value: money(s.todayTax), cls: '',
       sub: `all events ${money(s.eventTax)}${exclNote(s.excluded)}` },
     { label: 'Emails sent, all dates', value: num(s.allEmails), cls: '',
-      sub: `${s.allEmailsSince ? 'since ' + new Date(s.allEmailsSince + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' : ''}this event ${num(s.eventEmails)} · today ${num(s.todayEmails)} (${num(s.todayEmailsAcs)} via ACS)` },
-    { label: 'ACS hourly cap', value: `${num(s.acsHour)} / ${num(s.acsCap)}`, cls: s.acsLevel === 'ok' ? '' : s.acsLevel,
-      sub: `${s.acsPct}% · ` + (s.acsSince
-        ? 'since ' + new Date(s.acsSince).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' (restart)'
-        : 'last 60 min'),
-      meter: { pct: s.acsPct, level: s.acsLevel } },
+      sub: `${s.allEmailsSince ? 'since ' + new Date(s.allEmailsSince + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' : ''}this event ${num(s.eventEmails)} · today ${num(s.todayEmails)}` },
   ];
   renderTiles(tiles);
 }
@@ -758,7 +744,7 @@ document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.bar-ro
 // swaps each card's "today" numbers for that date's row; the live date always
 // uses the fresher heartbeat `today`. Sales, pulses and sound stay live.
 const HISTORY_MS = 60000;
-let venueHistory = new Map();         // venue key -> { todayDate, days: [{ date, event, orders, revenue, photos, emails, emailsAcs, sales }] }
+let venueHistory = new Map();         // venue key -> { todayDate, days: [{ date, event, orders, revenue, photos, emails, sales }] }
 let historyAt = 0, historyBusy = false;
 let viewDate = null;             // null = live; else 'YYYY-MM-DD' (not saved: every visit starts live)
 let lastSummary = null;
@@ -812,8 +798,8 @@ function renderDaySummary(all) {
   const revenue = Math.round(sumOf(t => t.revenue) * 100) / 100, orders = sumOf(t => t.orders);
   const net = Math.round(list.reduce((s, v) => s + netOf(v.today, v), 0) * 100) / 100;
   const missing = list.filter(v => taxOf(v.today, v) === null).map(v => v.venue);
-  const sumAll = (f) => all.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);   // emails: every venue uses the real ACS quota
-  const photos = sumOf(t => t.photos), emails = sumAll(t => t.emails), acs = sumAll(t => t.emailsAcs);
+  const sumAll = (f) => all.reduce((s, v) => s + (Number(f(v.today || {})) || 0), 0);   // emails: every venue counts (real sends)
+  const photos = sumOf(t => t.photos), emails = sumAll(t => t.emails);
   const active = all.filter(v => (Number(v.today.orders) || 0) + (Number(v.today.photos) || 0) > 0).length;
   renderTiles([
     { label: dayName(viewDate), value: `${active} venue${active === 1 ? '' : 's'}`, cls: '', sub: 'with photos or sales' },
@@ -821,7 +807,7 @@ function renderDaySummary(all) {
     { label: 'Tax', value: money(revenue - net), cls: '', sub: dayName(viewDate) + exclNote(excluded) },
     { label: 'Avg per order', value: avgText(net, orders), cls: '', sub: dayName(viewDate) },
     { label: 'Photos', value: num(photos), cls: '', sub: `${saleRate(orders, photos)} photo→sale` },
-    { label: 'Emails sent', value: num(emails), cls: '', sub: `${num(acs)} via ACS` },
+    { label: 'Emails sent', value: num(emails), cls: '', sub: 'all venues' },
   ]);
 }
 
@@ -1113,7 +1099,7 @@ tick();
 setInterval(tick, POLL_MS);
 
 
-// ── Email delivery (ACS → Event Grid → /api/mail) ───────────────────────────
+// ── Email delivery (venue heartbeat mailLog → /api/mail) ───────────────────────────
 // One row per recipient with its latest status. Times in Eastern.
 const ET = (t) => new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' ET';
 let mailData = null;
@@ -1130,9 +1116,9 @@ function renderMail() {
   if (!hint || !body) return;
   const d = mailData;
   if (!d || !d.total) {
-    hint.textContent = d && d.venuesReporting ? 'No emails in the last 7 days' : 'Waiting for venue or Azure reports';
+    hint.textContent = d && d.venuesReporting ? 'No emails in the last 7 days' : 'Waiting for venue reports';
     sumEl.textContent = '';
-    body.innerHTML = '<p class="muted mail-empty">No email results yet. Venues on the newest EventPhotos report their recent emails in the heartbeat; Azure (ACS) results arrive through Event Grid. A dashboard restart clears the Azure part.</p>';
+    body.innerHTML = '<p class="muted mail-empty">No email results yet. Venues on the newest EventPhotos report their last 24 hours of emails in the heartbeat.</p>';
     return;
   }
   const l = d.last24;
@@ -1142,7 +1128,7 @@ function renderMail() {
   const list = d.rows.filter(r => (!failOnly || !r.ok) && (!hideCopies || !r.copy));
   if (!list.length) { body.innerHTML = '<p class="muted mail-empty">Nothing to show with these filters.</p>'; return; }
   const pill = (r) => r.ok ? 'mail-ok' : r.waiting ? 'mail-wait' : 'mail-fail';
-  const where = (r) => r.source === 'acs' ? String(r.sender || '').split('@')[0] + ' <span class="mail-src">Azure</span>' : esc(String(r.venue || '').split(' - ')[0]) + (r.provider ? ` <span class="mail-src">${r.provider === 'm365' ? 'M365' : esc(r.provider.toUpperCase())}</span>` : '');
+  const where = (r) => esc(String(r.venue || '').split(' - ')[0]);
   body.innerHTML = `<table class="mail-table"><thead><tr><th>Time</th><th>Result</th><th>Venue</th><th>To</th><th>Order</th><th>Reason</th></tr></thead><tbody>${
     list.map(r => `<tr class="${r.ok || r.waiting ? '' : 'mail-row-bad'}">
       <td class="nowrap">${esc(ET(r.at))}</td>
