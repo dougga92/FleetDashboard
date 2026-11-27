@@ -410,3 +410,20 @@ button.ver:disabled { opacity: .7; cursor: default; }
 .hours-note { font-weight: 500; text-transform: none; letter-spacing: 0; }
 .hours-open { color: var(--blue); background: rgba(96,165,250,.12); border: 1px solid rgba(96,165,250,.45); }
 .hours-closed { color: var(--muted); border: 1px dashed var(--border-strong); }
+
+/* Email delivery fly-out */
+.mail-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 10px; font-size: 0.8rem; color: var(--muted); }
+.mail-sum { flex: 1 1 100%; }
+.mail-filter { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.mail-body { overflow-x: auto; }
+.mail-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.mail-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 8px 6px 0; border-bottom: 1px solid var(--border); }
+.mail-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.mail-addr { word-break: break-all; }
+.mail-reason { color: var(--muted); min-width: 180px; }
+.mail-pill { font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.mail-ok { color: #052e16; background: var(--green); }
+.mail-fail { color: #fff; background: var(--red); }
+.mail-copy { font-size: 0.7rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+.mail-bad { color: var(--red); }
+.mail-empty { padding: 8px 0; }

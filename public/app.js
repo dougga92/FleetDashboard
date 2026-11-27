@@ -1111,3 +1111,45 @@ renderHistControls();
 renderSellControls();
 tick();
 setInterval(tick, POLL_MS);
+
+
+// ── Email delivery (ACS → Event Grid → /api/mail) ───────────────────────────
+// One row per recipient with its latest status. Times in Eastern.
+const ET = (t) => new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' ET';
+let mailData = null;
+async function loadMail() {
+  try {
+    const r = await fetch('/api/mail', { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    mailData = await r.json();
+  } catch { mailData = mailData || null; }
+  renderMail();
+}
+function renderMail() {
+  const hint = $('mail-hint'), body = $('mail-body'), sumEl = $('mail-sum');
+  if (!hint || !body) return;
+  const d = mailData;
+  if (!d || (!d.total && !d.lastEventAt)) {
+    hint.textContent = 'Waiting for Azure events';
+    sumEl.textContent = '';
+    body.innerHTML = '<p class="muted mail-empty">No delivery results yet. They arrive from Azure (Event Grid) as emails are sent; a dashboard restart starts this list empty.</p>';
+    return;
+  }
+  const l = d.last24;
+  hint.innerHTML = `24h customers: <b>${num(l.customerDelivered)}</b> delivered · <b class="${l.customerFailed ? 'mail-bad' : ''}">${num(l.customerFailed)}</b> failed`;
+  sumEl.innerHTML = `Last 24h, all recipients: ${num(l.delivered)} delivered · ${num(l.failed)} failed`;
+  const failOnly = $('mail-fail-only').checked, hideCopies = $('mail-hide-copies').checked;
+  const list = d.rows.filter(r => (!failOnly || !r.ok) && (!hideCopies || !r.copy));
+  if (!list.length) { body.innerHTML = '<p class="muted mail-empty">Nothing to show with these filters.</p>'; return; }
+  body.innerHTML = `<table class="mail-table"><thead><tr><th>Time</th><th>Result</th><th>To</th><th>From</th><th>Reason</th></tr></thead><tbody>${
+    list.map(r => `<tr class="${r.ok ? '' : 'mail-row-bad'}">
+      <td class="nowrap">${esc(ET(r.at))}</td>
+      <td><span class="mail-pill ${r.ok ? 'mail-ok' : 'mail-fail'}">${r.ok ? 'Delivered' : esc(r.status)}</span>${r.copy ? ' <span class="mail-copy">copy</span>' : ''}</td>
+      <td class="mail-addr">${esc(r.recipient)}</td>
+      <td class="mail-addr">${esc(String(r.sender || '').split('@')[0])}</td>
+      <td class="mail-reason">${r.ok ? '' : esc(r.reason || '')}</td></tr>`).join('')
+  }</tbody></table>`;
+}
+['mail-fail-only', 'mail-hide-copies'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', renderMail); });
+loadMail();
+setInterval(loadMail, 60000);

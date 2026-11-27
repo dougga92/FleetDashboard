@@ -12,7 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const APP_VERSION = require('./package.json').version;
 const notifier = require('./notifier');   // texts on-call for critical alerts + dark venues
-const updater = require('./updater');     // remote "update now" over the heartbeat reply
+const updater = require('./updater');           // remote "update now" over the heartbeat reply
+const mailEvents = require('./mailEvents');     // ACS email delivery results via Event Grid
 
 const app = express();
 app.set('trust proxy', true);
@@ -231,6 +232,10 @@ app.get('/api/fleet', dashAuth, (_req, res) => {
 // resends the list every heartbeat, so a restart loses nothing once venues report.
 const MAX_DAYS = 120;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Email delivery results pushed by Event Grid from ACS (see mailEvents.js).
+app.post('/api/acs-events', express.json({ type: ['application/json', 'application/cloudevents+json'], limit: '1mb' }), mailEvents.handler);
+app.get('/api/mail', dashAuth, (_req, res) => res.json(mailEvents.snapshot()));
+
 app.get('/api/history', dashAuth, (_req, res) => {
   const venues = [...fleet.values()].map(v => ({
     key: venueKey(v),

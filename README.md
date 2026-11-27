@@ -120,6 +120,21 @@ unknown until it reports again. On the Free plan the app stays awake only while
 venues post heartbeats; if every venue went dark at once, nothing would text
 (B1 + Always On fixes that).
 
+## Email delivery (ACS → Event Grid)
+
+The rail's **Email delivery** fly-out lists every recipient's latest delivery result
+(Delivered / Failed / Bounced / Suppressed …, with the SMTP reason), times in Eastern,
+plus 24-hour customer counts on the launcher. Our own CC/BCC copies
+(`MAIL_COPY_DOMAINS`, default eventphotoprinters.com) are hidden by default.
+
+Azure pushes the results: on the **eventphotos-com-service** Communication Services
+resource → Events → + Event Subscription, event type **Email Delivery Report Received**,
+schema **Event Grid Schema**, endpoint **Web Hook**
+`https://fotomentum-fleet.azurewebsites.net/api/acs-events` (add `?key=<ACS_EVENTS_KEY>`
+if that app setting is set). Only events whose topic contains `ACS_RESOURCE_NAME`
+(default eventphotos-com-service) are accepted. In memory, last 7 days / 2000 rows:
+a restart starts the list empty.
+
 ## FotoPrint version
 
 Each card shows the venue's FotoPrint (print exe) version under its EventPhotos
