@@ -183,6 +183,15 @@ function byVenue(per, day) {
       <td>${r.mix && r.mix.upAmount ? dollars(r.mix.upAmount) : '—'}</td>${day ? `<td class="vr-wxtd">${wxCell(r.wx)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
 }
 
+// Is every night being saved for next season?
+function archiveNote() {
+  const a = archiveStatus;
+  if (!a || !a.enabled) return ' · <span class="vr-arch vr-arch-off">nights not being saved</span>';
+  if (a.lastError) return ` · <span class="vr-arch vr-arch-off" title="${esc(a.lastError)}">saving nights failed: retrying</span>`;
+  if (!a.loaded) return ' · <span class="vr-arch">connecting to the archive…</span>';
+  return ` · <span class="vr-arch" title="Every venue's nights, sales mix and weather are kept in Azure for future seasons${a.lastWriteAt ? '. Last saved ' + esc(new Date(a.lastWriteAt).toLocaleString()) : ''}">💾 ${num(a.nights)} nights saved</span>`;
+}
+
 function weatherNote(v) {
   const h = venueHistory.get(keyOf(v)) || {};
   return h.weatherPlace ? 'loading… (looked up from Open-Meteo for ' + esc(h.weatherPlace) + ')' : 'not available: this venue doesn\'t send its weather location yet (needs EventPhotos 1.3.44+)';
@@ -222,7 +231,7 @@ function renderReport() {
   const cartRows = mix ? mix.prints.map(r => ({ name: r.name + ' print', qty: r.qty })).concat(mix.digitals ? [{ name: 'Digital', qty: mix.digitals }] : [], mix.bundles ? [{ name: 'Bundle', qty: mix.bundles }] : []).sort((a, b) => b.qty - a.qty) : [];
   const nightsRows = inScope.slice().reverse();
   const meta = fleet
-    ? `${plural(lastVenues.filter(counts).length, 'venue')} added together${excluded.length ? ` · excl. ${esc(excluded.join(', '))}` : ''}${all.length ? ` · reports from ${esc(shortDay(all[0].date))}` : ''}`
+    ? `${plural(lastVenues.filter(counts).length, 'venue')} added together${excluded.length ? ` · excl. ${esc(excluded.join(', '))}` : ''}${all.length ? ` · reports from ${esc(shortDay(all[0].date))}` : ''}${archiveNote()}`
     : `${v.event ? esc(v.event) + ' · ' : ''}${all.length ? `reports from ${esc(shortDay(all[0].date))}` : 'no history yet'}${counts(v) ? '' : ' · <span class="not-total">not in fleet totals</span>'}`;
 
   RP_BODY.innerHTML = `

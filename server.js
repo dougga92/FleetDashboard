@@ -15,6 +15,7 @@ const notifier = require('./notifier');   // texts on-call for critical alerts +
 const updater = require('./updater');           // remote "update now" over the heartbeat reply
 const mailEvents = require('./mailEvents');     // per-email delivery log from venue heartbeats
 const weather = require('./weather');           // weather for each reported night (Open-Meteo history)
+const archive = require('./archive');           // every night saved for good (Azure Table Storage)
 
 const app = express();
 app.set('trust proxy', true);
@@ -79,6 +80,7 @@ app.post('/api/heartbeat', (req, res) => {
   fleet.set(venueKey(p), { ...p, alerts, digitalOnly, receivedAt: Date.now() });
   const update = updater.onHeartbeat(venueKey(p), p);   // only while an update is pending for this venue
   res.json(update ? { ok: true, update } : { ok: true });
+  saveNights(p);
   notifier.check(fleet).catch(e => console.error('[alerts]', e));   // new critical alerts text right away
 });
 
@@ -177,17 +179,37 @@ const MAX_DAYS = 120;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 app.get('/api/mail', dashAuth, (_req, res) => res.json(mailEvents.snapshot(Date.now(), [...fleet.values()])));
 
+// The nights a venue sends now: days[] plus the fresher `today` (same date wins).
+function sentNights(v) {
+  const todayDate = v.today && DATE_RE.test(v.today.date || '') ? v.today.date : null;
+  const days = (Array.isArray(v.days) ? v.days : []).filter(d => d && DATE_RE.test(d.date || '')).slice(0, MAX_DAYS);
+  const rows = todayDate ? [{ ...(days.find(d => d.date === todayDate) || {}), ...v.today, date: todayDate }].concat(days.filter(d => d.date !== todayDate)) : days;
+  return { todayDate, days, rows };
+}
+// Every heartbeat: save new/changed nights (with their weather) to the archive.
+function saveNights(p) {
+  const { rows } = sentNights(p);
+  const wx = weather.nightsFor(p, rows.map(d => d.date));   // also keeps the weather fetched while nobody watches
+  archive.saveVenue(venueKey(p), p, rows, wx || {});
+}
+
 app.get('/api/history', dashAuth, (_req, res) => {
   const venues = [...fleet.values()].map(v => {
-    const todayDate = v.today && DATE_RE.test(v.today.date || '') ? v.today.date : null;
-    const days = (Array.isArray(v.days) ? v.days : [])
-      .filter(d => d && DATE_RE.test(d.date || ''))
-      .slice(0, MAX_DAYS);
-    const dates = [...new Set(days.map(d => d.date).concat(todayDate ? [todayDate] : []))];
-    // weather: date -> open-hours summary (null = venue sends no weather place; {} = still loading)
-    return { key: venueKey(v), venue: v.venue, todayDate, days, weatherPlace: weather.placeOf(v), weather: weather.nightsFor(v, dates), weatherError: weather.errorFor(v) };
+    const { todayDate, days: sent } = sentNights(v);
+    // Add saved nights the venue no longer sends (older than its ~120-day window, or a replaced PC).
+    const have = new Set(sent.map(d => d.date).concat(todayDate ? [todayDate] : []));
+    const old = archive.nightsOf(venueKey(v)).filter(r => !have.has(r.date));
+    const days = sent.concat(old.map(({ weather: _w, venueKey: _k, venue: _n, taxRate: _t, savedAt: _s, ...d }) => d))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const dates = [...have];
+    // weather: date -> open-hours summary (null = venue sends no weather place; {} = still loading);
+    // saved weather fills nights older than the lookup window (92 days).
+    const live = weather.nightsFor(v, dates);
+    const wx = { ...Object.fromEntries(archive.nightsOf(venueKey(v)).filter(r => r.weather).map(r => [r.date, r.weather])), ...(live || {}) };
+    return { key: venueKey(v), venue: v.venue, todayDate, days, savedNights: archive.nightsOf(venueKey(v)).length,
+      weatherPlace: weather.placeOf(v), weather: live === null && !Object.keys(wx).length ? null : wx, weatherError: weather.errorFor(v) };
   });
-  res.json({ venues, generatedAt: new Date().toISOString() });
+  res.json({ venues, archive: archive.status(), generatedAt: new Date().toISOString() });
 });
 
 // ── Static board ─────────────────────────────────────────────────────────────

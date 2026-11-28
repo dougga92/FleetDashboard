@@ -88,6 +88,19 @@ calendars, a Weather column in the night-by-night table (rough nights in amber),
 banner when one night is picked, in the tooltips, and on the cards' weather chip
 when the board shows a past date.
 
+## Night archive (kept for future seasons)
+`archive.js` saves one record per venue per night in Azure Table Storage
+(account `fotomentumfleetarchive`, table `nights`, PartitionKey = venue key,
+RowKey = date): orders, revenue, tax, photos, emails, event, the sales mix and
+that night's open-hours weather. Written on each heartbeat, only when a night
+changed. `/api/history` adds saved nights the venue no longer sends (venues send
+~120 days; a replaced PC loses its database), and saved weather covers nights
+older than Open-Meteo's 92-day lookup. The fleet Sales report shows
+"💾 N nights saved" (amber if saving fails). App settings: `ARCHIVE_TABLE_URL`,
+`ARCHIVE_TABLE`. Auth: the web app's system-assigned managed identity with
+**Storage Table Data Contributor** on the account; shared keys are disabled on
+the account (no secrets). Local dev: `ARCHIVE_FILE=./nights.json`.
+
 ## Sales tax (true revenue)
 
 Venue prices **include** sales tax, so `revenue` is what customers paid. The

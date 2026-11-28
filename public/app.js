@@ -747,6 +747,7 @@ document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.bar-ro
 const HISTORY_MS = 60000;
 let venueHistory = new Map();         // venue key -> { todayDate, days: [{ date, event, orders, revenue, photos, emails, sales }] }
 let historyAt = 0, historyBusy = false;
+let archiveStatus = null;        // night archive (server): { enabled, loaded, nights, lastError, ... }
 let viewDate = null;             // null = live; else 'YYYY-MM-DD' (not saved: every visit starts live)
 let lastSummary = null;
 let histMeasure = store.get('fleet.histMeasure', 'revenue');
@@ -761,7 +762,7 @@ function loadHistory() {
   historyBusy = true;
   fetch('/api/history', { headers: { Accept: 'application/json' } })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
-    .then(j => { venueHistory = new Map((j.venues || []).map(h => [String(h.key), h])); historyAt = Date.now(); renderView(); })
+    .then(j => { venueHistory = new Map((j.venues || []).map(h => [String(h.key), h])); archiveStatus = j.archive || null; historyAt = Date.now(); renderView(); })
     .catch(() => { historyAt = Date.now() - HISTORY_MS + 15000; })   // retry in ~15 s
     .finally(() => { historyBusy = false; });
 }

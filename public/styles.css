@@ -540,3 +540,5 @@ body.vr-open .fly-launch { background: rgba(57,135,229,.14); border-color: rgba(
 .vr-daywx { font-size: 0.85rem; padding: 9px 12px; border-radius: 9px; margin: -6px 0 16px; background: var(--surface); border: 1px solid var(--border); }
 .vr-daywx b { margin-right: 4px; }
 .vr-daywx.vr-rough { border-color: rgba(251,191,36,.55); background: rgba(251,191,36,.08); }
+.vr-arch { color: var(--green); white-space: nowrap; }
+.vr-arch-off { color: var(--amber); }
