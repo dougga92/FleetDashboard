@@ -74,6 +74,20 @@ venue's nights added together (minus `TOTALS_EXCLUDE` venues, like the tiles),
 **All dates** or **Current events** (each venue's current event), plus a **By
 venue** table; tap a venue there to open its own report (← Fleet goes back).
 
+**Weather per night** (`weather.js`): for each venue's reported nights the server
+looks up the weather during its open hours (`operating.today`, else 5–10 pm) from
+Open-Meteo's hourly history (last 92 days, venue time zone), using the venue's
+heartbeat `weather.place` (EventPhotos 1.3.44+; same place and same service as the
+live weather chip). Nothing is stored: cached in memory per place, refreshed every
+3 h (hourly while open), re-fetched after a restart. `/api/history` adds
+`weatherPlace` and `weather` {date: {category, icon, label, startF, loF, hiF,
+precipIn, wetHours, windMph, rainBeforeIn, hours, rough, why}}. A night is
+**rough** for storms, snow, ≥0.05" rain while open, ≤32°F, wind ≥25 mph or
+≥0.25" rain earlier that day. Shown as a small icon on rough nights in the report
+calendars, a Weather column in the night-by-night table (rough nights in amber), a
+banner when one night is picked, in the tooltips, and on the cards' weather chip
+when the board shows a past date.
+
 ## Sales tax (true revenue)
 
 Venue prices **include** sales tax, so `revenue` is what customers paid. The

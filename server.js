@@ -14,6 +14,7 @@ const APP_VERSION = require('./package.json').version;
 const notifier = require('./notifier');   // texts on-call for critical alerts + dark venues
 const updater = require('./updater');           // remote "update now" over the heartbeat reply
 const mailEvents = require('./mailEvents');     // per-email delivery log from venue heartbeats
+const weather = require('./weather');           // weather for each reported night (Open-Meteo history)
 
 const app = express();
 app.set('trust proxy', true);
@@ -177,14 +178,15 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 app.get('/api/mail', dashAuth, (_req, res) => res.json(mailEvents.snapshot(Date.now(), [...fleet.values()])));
 
 app.get('/api/history', dashAuth, (_req, res) => {
-  const venues = [...fleet.values()].map(v => ({
-    key: venueKey(v),
-    venue: v.venue,
-    todayDate: v.today && DATE_RE.test(v.today.date || '') ? v.today.date : null,
-    days: (Array.isArray(v.days) ? v.days : [])
+  const venues = [...fleet.values()].map(v => {
+    const todayDate = v.today && DATE_RE.test(v.today.date || '') ? v.today.date : null;
+    const days = (Array.isArray(v.days) ? v.days : [])
       .filter(d => d && DATE_RE.test(d.date || ''))
-      .slice(0, MAX_DAYS),
-  }));
+      .slice(0, MAX_DAYS);
+    const dates = [...new Set(days.map(d => d.date).concat(todayDate ? [todayDate] : []))];
+    // weather: date -> open-hours summary (null = venue sends no weather place; {} = still loading)
+    return { key: venueKey(v), venue: v.venue, todayDate, days, weatherPlace: weather.placeOf(v), weather: weather.nightsFor(v, dates) };
+  });
   res.json({ venues, generatedAt: new Date().toISOString() });
 });
 

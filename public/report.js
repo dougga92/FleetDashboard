@@ -26,7 +26,7 @@ function venueNights(v) {
   if (v.today) m.set(live, { ...(m.get(live) || {}), ...v.today, date: live, event: (v.today && v.today.event) || (m.get(live) || {}).event || v.event });
   return [...m.values()].filter(d => d && d.date).sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
     date: d.date, event: d.event || '', orders: Number(d.orders) || 0, photos: Number(d.photos) || 0,
-    net: netOf(d, v), tax: taxOf(d, v), mix: salesOf(d), live: d.date === live,
+    net: netOf(d, v), tax: taxOf(d, v), mix: salesOf(d), live: d.date === live, wx: wxOf(v, d.date),
   }));
 }
 
@@ -63,7 +63,7 @@ function fleetNights(scope) {
       const f = dates.get(d.date) || { date: d.date, event: '', orders: 0, photos: 0, net: 0, tax: 0, mixes: [], live: false, by: [] };
       f.orders += d.orders; f.photos += d.photos; f.net += d.net; f.tax += d.tax || 0;
       f.mixes.push(d.mix); f.live = f.live || d.live;
-      f.by.push({ name: shortName(v), net: d.net, orders: d.orders });
+      f.by.push({ name: shortName(v), net: d.net, orders: d.orders, wx: d.wx });
       dates.set(d.date, f);
     }
   }
@@ -73,6 +73,16 @@ function fleetNights(scope) {
 
 const dollars = (n) => money(n).replace(/\.00$/, '');
 const plural = (n, w) => `${num(n)} ${w}${n === 1 ? '' : 's'}`;
+// Rough weather during open hours: the night's own, or (fleet) any venue's. → { icon, why } | null
+function roughOf(d) {
+  const list = d.by ? d.by.map(x => x.wx && { ...x.wx, who: x.name }) : [d.wx];
+  const bad = list.filter(w => w && w.rough);
+  if (!bad.length) return null;
+  const w = bad.sort((a, b) => (b.category === 'storm') - (a.category === 'storm') || b.precipIn - a.precipIn)[0];
+  const icon = ['storm', 'snow', 'rain'].includes(w.category) ? w.icon : w.loF <= 32 ? '🥶' : w.windMph >= 25 ? '💨' : '🌧️';
+  return { icon, why: bad.map(x => (x.who ? x.who + ': ' : '') + x.why).join('; ') };
+}
+const wxCell = (w) => w ? `<span class="vr-wxc${w.rough ? ' vr-rough' : ''}" title="${esc(wxLine(w, true))}">${esc(wxLine(w))}</span>` : '<span class="muted">—</span>';
 
 function openReport(key, from = null) {
   rep.key = key; rep.scope = 'all'; rep.from = from;
@@ -94,7 +104,8 @@ function closeReport() {
 function nightTip(d) {
   const by = d.by ? d.by.filter(x => x.orders > 0).sort((a, b) => b.net - a.net) : [];
   return `<b>${esc(dayName(d.date))}</b>${d.live ? ' · live' : ''}<br>${d.orders ? `${money(d.net)} sales · ${plural(d.orders, 'order')}` : 'Open, no sales'} · ${plural(d.photos, 'photo')}` +
-    (d.by ? by.map(x => `<br>${esc(x.name)}: ${money(x.net)} · ${plural(x.orders, 'order')}`).join('') : (d.event ? '<br>' + esc(d.event) : ''));
+    (d.by ? d.by.slice().sort((a, b) => b.net - a.net).map(x => `<br>${esc(x.name)}: ${x.orders ? `${money(x.net)} · ${plural(x.orders, 'order')}` : 'no sales'}${x.wx ? ' · ' + esc(wxLine(x.wx)) : ''}`).join('')
+      : (d.event ? '<br>' + esc(d.event) : '') + (d.wx ? `<br>${esc(wxLine(d.wx, true))}` : ''));
 }
 
 function calendar(nights, maxSales) {
@@ -113,13 +124,14 @@ function calendar(nights, maxSales) {
       const d = byDate.get(iso);
       if (!d) { cells.push(`<span class="vr-c vr-none">${day}</span>`); continue; }
       const lv = d.orders > 0 ? level(d.net) : 0;
-      cells.push(`<button type="button" class="vr-c vr-l${lv}${d.orders ? '' : ' vr-zero'}${iso === rep.day ? ' vr-sel' : ''}${d.live ? ' vr-today' : ''}" data-day="${iso}" data-tip="${esc(nightTip(d))}" aria-label="${esc(dayName(iso) + ': ' + (d.orders ? money(d.net) + ', ' + plural(d.orders, 'order') : 'no sales'))}">${day}</button>`);
+      const bad = roughOf(d);
+      cells.push(`<button type="button" class="vr-c vr-l${lv}${d.orders ? '' : ' vr-zero'}${iso === rep.day ? ' vr-sel' : ''}${d.live ? ' vr-today' : ''}" data-day="${iso}" data-tip="${esc(nightTip(d))}" aria-label="${esc(dayName(iso) + ': ' + (d.orders ? money(d.net) + ', ' + plural(d.orders, 'order') : 'no sales') + (bad ? ', ' + bad.why : ''))}">${day}${bad ? `<span class="vr-wx" aria-hidden="true">${bad.icon}</span>` : ''}</button>`);
     }
     return `<figure class="vr-month"><figcaption>${new Date(y, mo, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</figcaption>
       <div class="vr-wk">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(w => `<span>${w}</span>`).join('')}</div>
       <div class="vr-days">${cells.join('')}</div></figure>`;
   }).join('')}
-  <div class="vr-key"><span>No report</span><i class="vr-c vr-none"></i><span>Open, no sale</span><i class="vr-c vr-zero"></i><span>Less</span><i class="vr-c vr-l1"></i><i class="vr-c vr-l2"></i><i class="vr-c vr-l3"></i><i class="vr-c vr-l4"></i><span>More sales</span></div>
+  <div class="vr-key"><span>No report</span><i class="vr-c vr-none"></i><span>Open, no sale</span><i class="vr-c vr-zero"></i><span>Less</span><i class="vr-c vr-l1"></i><i class="vr-c vr-l2"></i><i class="vr-c vr-l3"></i><i class="vr-c vr-l4"></i><span>More sales</span><span class="vr-keywx">🌧️ ❄️ ⛈️ 🥶 = rough weather during open hours</span></div>
   </div>`;
 }
 
@@ -154,12 +166,12 @@ function byVenue(per, day) {
   const rows = per.map(({ v, nights }) => {
     const f = day ? nights.filter(d => d.date === day) : nights;
     const net = f.reduce((s, d) => s + d.net, 0), orders = f.reduce((s, d) => s + d.orders, 0);
-    return { v, net, orders, sold: f.filter(d => d.orders > 0).length, open: f.length, mix: mergeMix(f.map(d => d.mix)) };
+    return { v, net, orders, sold: f.filter(d => d.orders > 0).length, open: f.length, mix: mergeMix(f.map(d => d.mix)), wx: day && f[0] ? f[0].wx : null };
   }).filter(r => r.open).sort((a, b) => (counts(b.v) - counts(a.v)) || b.net - a.net || byName(a.v, b.v));
   if (!rows.length) return '<p class="vr-none-txt">No venue reported this night.</p>';
   const max = Math.max(0, ...rows.filter(r => counts(r.v)).map(r => r.net));
   return `<div class="vr-table-wrap"><table class="vr-table vr-venues">
-    <thead><tr><th>Venue</th><th>Sales</th><th>Orders</th><th>Avg</th>${day ? '' : '<th>Nights sold</th>'}<th class="vr-mixh">Packages / à la carte</th><th>Upsells</th></tr></thead>
+    <thead><tr><th>Venue</th><th>Sales</th><th>Orders</th><th>Avg</th>${day ? '' : '<th>Nights sold</th>'}<th class="vr-mixh">Packages / à la carte</th><th>Upsells</th>${day ? '<th>Weather (open hours)</th>' : ''}</tr></thead>
     <tbody>${rows.map(r => `<tr class="${r.orders ? '' : 'vr-dim'}" data-venue="${esc(keyOf(r.v))}" tabindex="0" title="Open ${esc(r.v.venue)}'s report">
       <td><span class="vr-vname">${esc(shortName(r.v))}</span>${counts(r.v) ? '' : ' <span class="vr-excl">not in totals</span>'}
         ${counts(r.v) && max > 0 ? `<span class="vr-share"><span style="width:${Math.max(1, r.net / max * 100)}%"></span></span>` : ''}</td>
@@ -168,7 +180,12 @@ function byVenue(per, day) {
       <td class="nowrap">${avgText(r.net, r.orders, true)}</td>
       ${day ? '' : `<td>${r.sold} of ${r.open}</td>`}
       <td><div class="vr-mixc">${mixStack(r.mix)}</div></td>
-      <td>${r.mix && r.mix.upAmount ? dollars(r.mix.upAmount) : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+      <td>${r.mix && r.mix.upAmount ? dollars(r.mix.upAmount) : '—'}</td>${day ? `<td class="vr-wxtd">${wxCell(r.wx)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function weatherNote(v) {
+  const h = venueHistory.get(keyOf(v)) || {};
+  return h.weatherPlace ? 'loading… (looked up from Open-Meteo for ' + esc(h.weatherPlace) + ')' : 'not available: this venue doesn\'t send its weather location yet (needs EventPhotos 1.3.44+)';
 }
 
 function renderReport() {
@@ -227,6 +244,8 @@ function renderReport() {
       ${stat('Upsells', mix ? dollars(mix.upAmount) : '—', mix ? `${plural(mix.upItems, 'item')}${mix.pkgWithExtras ? ` · ${num(mix.pkgWithExtras)} pkg orders added extras` : ''}` : 'not reported')}
     </div>
 
+    ${!fleet && rep.day && focus[0] ? `<div class="vr-daywx${focus[0].wx && focus[0].wx.rough ? ' vr-rough' : ''}">${focus[0].wx ? `<b>Weather</b> ${esc(wxLine(focus[0].wx, true))}${focus[0].wx.rough ? ' · <b>rough night</b>' : ''}` : `<b>Weather</b> ${weatherNote(v)}`}</div>` : ''}
+
     ${fleet ? `<section class="vr-sec">
       <h3>By venue <span class="vr-sub">${esc(period)} · tap a venue for its report</span></h3>
       ${byVenue(per, rep.day)}
@@ -251,7 +270,7 @@ function renderReport() {
     <section class="vr-sec">
       <h3>Night by night</h3>
       ${nightsRows.length ? `<div class="vr-table-wrap"><table class="vr-table">
-        <thead><tr><th>Night</th>${fleet ? '<th>Venues</th>' : ''}<th>Orders</th><th class="vr-mixh">Packages / à la carte</th><th>Sales</th><th>Upsells</th><th>Photos</th></tr></thead>
+        <thead><tr><th>Night</th>${fleet ? '<th>Venues</th>' : ''}<th>Orders</th><th class="vr-mixh">Packages / à la carte</th><th>Sales</th><th>Upsells</th><th>Photos</th>${fleet ? '<th>Rough weather</th>' : '<th>Weather (open hours)</th>'}</tr></thead>
         <tbody>${nightsRows.map(d => `<tr class="${d.orders ? '' : 'vr-dim'}${d.date === rep.day ? ' vr-row-sel' : ''}" data-day="${d.date}" tabindex="0"${fleet ? ` data-tip="${esc(nightTip(d))}"` : ''}>
             <td class="nowrap">${esc(dayName(d.date))}${d.live ? ' <span class="vr-live">live</span>' : ''}</td>
             ${fleet ? `<td>${d.by.filter(x => x.orders > 0).length}</td>` : ''}
@@ -259,7 +278,8 @@ function renderReport() {
             <td><div class="vr-mixc">${mixStack(d.mix)}</div></td>
             <td class="nowrap">${d.orders ? money(d.net) : '—'}</td>
             <td>${d.mix && d.mix.upAmount ? dollars(d.mix.upAmount) : '—'}</td>
-            <td>${num(d.photos)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="vr-none-txt">Nothing yet.</p>'}
+            <td>${num(d.photos)}</td>
+            <td class="vr-wxtd">${fleet ? (roughOf(d) ? `<span class="vr-wxc vr-rough">${esc(roughOf(d).icon + ' ' + roughOf(d).why)}</span>` : '<span class="muted">—</span>') : wxCell(d.wx)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="vr-none-txt">Nothing yet.</p>'}
     </section>`;
 }
 

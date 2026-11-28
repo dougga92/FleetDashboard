@@ -766,6 +766,18 @@ function loadHistory() {
     .finally(() => { historyBusy = false; });
 }
 const daysOf = (v) => (venueHistory.get(keyOf(v)) || {}).days || [];
+// Weather for one night (server looks it up from Open-Meteo history, open hours only). null = none.
+const wxOf = (v, date) => (((venueHistory.get(keyOf(v)) || {}).weather) || {})[date] || null;
+const hr12 = (h) => `${((h + 11) % 12) + 1}${h < 12 || h === 24 ? 'am' : 'pm'}`;
+// "🌧️ Rain · 38–44°F · 0.4\" rain · wind 25 mph"
+function wxLine(w, long = false) {
+  if (!w) return '';
+  const parts = [`${w.icon} ${w.label}`, w.loF === w.hiF ? `${w.hiF}°F` : `${w.loF}–${w.hiF}°F`];
+  if (w.precipIn >= 0.01) parts.push(`${w.precipIn}" ${w.category === 'snow' ? 'precip' : 'rain'}`);
+  if (long || w.windMph >= 25) parts.push(`wind ${w.windMph} mph`);
+  if (w.rainBeforeIn >= 0.25) parts.push(`${w.rainBeforeIn}" rain earlier`);
+  return parts.join(' · ') + (long && w.hours ? ` (${hr12(w.hours[0])}–${hr12(w.hours[1])})` : '');
+}
 // The venue's own "today" (its time zone), so a late-night venue out west stays on its date.
 function liveDate(v) {
   const h = venueHistory.get(keyOf(v)) || {};
@@ -779,7 +791,9 @@ function shownVenues() {
   if (!viewDate) return lastVenues;
   return lastVenues.map(v => {
     const r = recordFor(v, viewDate);
-    return r ? { ...v, today: r, event: r.event || v.event } : null;
+    if (!r) return null;
+    const w = wxOf(v, viewDate);   // that night's weather on the card's chip
+    return { ...v, today: r, event: r.event || v.event, weather: w ? { summary: `${w.icon} ${w.label} ${w.startF}°F`, hiF: w.hiF, loF: w.loF, category: w.category, place: (v.weather && v.weather.place ? v.weather.place + ' · ' : '') + 'open hours' } : null };
   }).filter(Boolean);
 }
 const liveDates = () => new Set(lastVenues.map(liveDate));
@@ -888,7 +902,8 @@ function renderHistory() {
   };
   const venueTip = (v) => (d, n) => {
     const r = recordFor(v, d) || {};
-    return `<b>${esc(shortName(v))} · ${esc(dayName(d))}</b><br>${money(netOf(r, v))} before tax · ${num(r.orders)} orders · ${num(r.photos)} photos` + (r.event ? `<br>${esc(r.event)}` : '');
+    const w = wxOf(v, d);
+    return `<b>${esc(shortName(v))} · ${esc(dayName(d))}</b><br>${money(netOf(r, v))} before tax · ${num(r.orders)} orders · ${num(r.photos)} photos` + (r.event ? `<br>${esc(r.event)}` : '') + (w ? `<br>${esc(wxLine(w))}` : '');
   };
   const total = (v) => dates.reduce((s, d) => s + val(v, d), 0);
   box.innerHTML = `
