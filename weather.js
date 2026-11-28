@@ -9,6 +9,9 @@
 // Nothing is written to disk: the history is Open-Meteo's, re-fetched after a
 // restart. Cached per place; refreshed every 3 h (hourly while a venue is open).
 
+// Azure App Service: prefer IPv4 (no IPv6 egress; a v6-first lookup fails as "fetch failed").
+require('dns').setDefaultResultOrder('ipv4first');
+
 const GEO_URL = (name) => `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`;
 const HIST_URL = (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
   '&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m&past_days=92&forecast_days=1' +
@@ -18,7 +21,7 @@ const DEFAULT_HOURS = [17, 22];
 
 const geo = new Map();      // place -> { lat, lon } | null (not found)
 const cache = new Map();    // place -> { at, hourly } ; hourly = { time[], temperature_2m[], ... }
-const busy = new Set(), failedAt = new Map();
+const busy = new Set(), failedAt = new Map(), lastError = new Map();   // place -> 'msg (code)'
 
 // WMO weather codes → our categories, worst first.
 const RANK = { storm: 6, snow: 5, rain: 4, fog: 3, clouds: 2, clear: 1 };
@@ -60,10 +63,12 @@ async function refresh(place) {
     const ll = geo.get(place);
     if (!ll) return;
     const j = await getJson(HIST_URL(ll.lat, ll.lon));
-    if (j && j.hourly && Array.isArray(j.hourly.time)) cache.set(place, { at: Date.now(), hourly: j.hourly });
+    if (j && j.hourly && Array.isArray(j.hourly.time)) { cache.set(place, { at: Date.now(), hourly: j.hourly }); lastError.delete(place); }
   } catch (e) {
     failedAt.set(place, Date.now());
-    console.error('[weather]', place, e.message);
+    const why = `${e.message}${e.cause ? ' (' + (e.cause.code || e.cause.message) + ')' : ''}`;
+    lastError.set(place, why);
+    console.error('[weather]', place, why);
   } finally { busy.delete(place); }
 }
 
@@ -124,4 +129,6 @@ function nightsFor(v, dates) {
   return out;
 }
 
-module.exports = { nightsFor, placeOf };
+const errorFor = (v) => { const p = placeOf(v); return p && !cache.has(p) ? lastError.get(p) || null : null; };
+
+module.exports = { nightsFor, placeOf, errorFor };

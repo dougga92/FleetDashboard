@@ -185,7 +185,7 @@ app.get('/api/history', dashAuth, (_req, res) => {
       .slice(0, MAX_DAYS);
     const dates = [...new Set(days.map(d => d.date).concat(todayDate ? [todayDate] : []))];
     // weather: date -> open-hours summary (null = venue sends no weather place; {} = still loading)
-    return { key: venueKey(v), venue: v.venue, todayDate, days, weatherPlace: weather.placeOf(v), weather: weather.nightsFor(v, dates) };
+    return { key: venueKey(v), venue: v.venue, todayDate, days, weatherPlace: weather.placeOf(v), weather: weather.nightsFor(v, dates), weatherError: weather.errorFor(v) };
   });
   res.json({ venues, generatedAt: new Date().toISOString() });
 });
