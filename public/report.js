@@ -1,32 +1,41 @@
-// Venue sales report: the "Sales report" button on each card opens a panel from
-// the right with everything that venue sold, built from the per-night `days`
-// history (+ the live `today`). Loaded after app.js and uses its helpers
-// (normSales, netOf, daysOf, liveDate, money, num, esc, showTip, ...).
+// Sales reports, one look for a venue and for the whole fleet. They open in a panel
+// from the right:
+//   • a venue's report: the "📊 Sales report" button on its card;
+//   • the fleet report: "Sales report" in the left rail (every venue added
+//     together, minus TOTALS_EXCLUDE venues, as the fleet tiles do; plus a
+//     By venue table, where tapping a venue opens its own report with a ← Fleet back button).
+// Built from each venue's per-night `days` history (+ the live `today`). Loaded
+// after app.js and uses its helpers (normSales, netOf, daysOf, liveDate, money, ...).
 //
-//   • Scope: All dates | This event; tap a night (calendar or list) to narrow to it.
-//   • Headline: sales (no tax), orders, avg order, nights with a sale.
+//   • Scope: All dates | This event (fleet: Current events); tap a night to narrow to it.
+//   • Headline: sales (no tax), orders, nights with a sale, upsells.
 //   • Sale nights: month calendar, each night shaded by its sales.
 //   • By weekday: which nights of the week sell.
 //   • What sold: packages vs à la carte, each package, à la carte items, upsells.
 //   • Night by night: one row per night, newest first.
-const rep = { key: null, scope: 'all', day: null };
+const FLEET = '__fleet__';
+const rep = { key: null, scope: 'all', day: null, from: null };
 const RP = $('vr'), RP_BODY = $('vr-body');
 
-// Every night this venue reported, oldest first; the live date uses the fresher heartbeat `today`.
+// One venue's nights, oldest first, normalised to
+// { date, event, orders, photos, net, tax (null = not reported), mix (normSales shape|null), live }.
+// The live date uses the fresher heartbeat `today`.
 function venueNights(v) {
   const live = liveDate(v);
   const m = new Map(daysOf(v).map(d => [d.date, d]));
   if (v.today) m.set(live, { ...(m.get(live) || {}), ...v.today, date: live, event: (v.today && v.today.event) || (m.get(live) || {}).event || v.event });
-  return [...m.values()].filter(d => d && d.date).sort((a, b) => a.date.localeCompare(b.date));
+  return [...m.values()].filter(d => d && d.date).sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
+    date: d.date, event: d.event || '', orders: Number(d.orders) || 0, photos: Number(d.photos) || 0,
+    net: netOf(d, v), tax: taxOf(d, v), mix: salesOf(d), live: d.date === live,
+  }));
 }
 
-// Add several nights' sales mixes together (null when none of them carry one).
-function sumMix(nights) {
+// Add several sales mixes together (null when none is present). Same shape as normSales().
+function mergeMix(mixes) {
   const t = { pkgOrders: 0, cartOrders: 0, orders: 0, pkgWithExtras: 0, digitals: 0, bundles: 0, upItems: 0, upAmount: 0, packages: new Map(), prints: new Map() };
   let any = false;
   const add = (map, k, q) => map.set(k, (map.get(k) || 0) + q);
-  for (const d of nights) {
-    const m = salesOf(d);
+  for (const m of mixes) {
     if (!m) continue;
     any = true;
     for (const k of ['pkgOrders', 'cartOrders', 'orders', 'pkgWithExtras', 'digitals', 'bundles', 'upItems', 'upAmount']) t[k] += m[k];
@@ -34,33 +43,63 @@ function sumMix(nights) {
     for (const r of m.prints) add(t.prints, r.name, r.qty);
   }
   if (!any) return null;
-  const rows = (map) => [...map].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n);
+  const rows = (map) => [...map].map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty);
   return { ...t, packages: rows(t.packages), prints: rows(t.prints) };
+}
+
+// Fleet nights: every counted venue's nights added together per date. `by` keeps
+// each venue's share (for the tooltips and the By venue table). scope 'event' =
+// each venue's nights for its current event only.
+function fleetNights(scope) {
+  const per = lastVenues.map(v => {
+    let n = venueNights(v);
+    if (scope === 'event') n = v.event ? n.filter(d => d.event === v.event) : [];
+    return { v, nights: n };
+  });
+  const dates = new Map();
+  for (const { v, nights } of per) {
+    if (!counts(v)) continue;
+    for (const d of nights) {
+      const f = dates.get(d.date) || { date: d.date, event: '', orders: 0, photos: 0, net: 0, tax: 0, mixes: [], live: false, by: [] };
+      f.orders += d.orders; f.photos += d.photos; f.net += d.net; f.tax += d.tax || 0;
+      f.mixes.push(d.mix); f.live = f.live || d.live;
+      f.by.push({ name: shortName(v), net: d.net, orders: d.orders });
+      dates.set(d.date, f);
+    }
+  }
+  const nights = [...dates.values()].sort((a, b) => a.date.localeCompare(b.date)).map(f => ({ ...f, mix: mergeMix(f.mixes) }));
+  return { nights, per };
 }
 
 const dollars = (n) => money(n).replace(/\.00$/, '');
 const plural = (n, w) => `${num(n)} ${w}${n === 1 ? '' : 's'}`;
 
-function openReport(key) {
-  rep.key = key; rep.scope = 'all';
+function openReport(key, from = null) {
+  rep.key = key; rep.scope = 'all'; rep.from = from;
   rep.day = viewDate || null;                 // opened while looking at a past night → start on that night
   closeFlies();
   RP.hidden = false;
   document.body.classList.add('vr-open');
   renderReport();
+  RP.querySelector('.vr-panel').scrollTop = 0;
   RP.querySelector('.fly-close').focus({ preventScroll: true });
 }
 function closeReport() {
   if (RP.hidden) return;
-  RP.hidden = true; rep.key = null;
+  RP.hidden = true; rep.key = null; rep.from = null;
   document.body.classList.remove('vr-open');
   hideTip();
 }
 
-function calendar(nights, maxSales, v) {
+function nightTip(d) {
+  const by = d.by ? d.by.filter(x => x.orders > 0).sort((a, b) => b.net - a.net) : [];
+  return `<b>${esc(dayName(d.date))}</b>${d.live ? ' · live' : ''}<br>${d.orders ? `${money(d.net)} sales · ${plural(d.orders, 'order')}` : 'Open, no sales'} · ${plural(d.photos, 'photo')}` +
+    (d.by ? by.map(x => `<br>${esc(x.name)}: ${money(x.net)} · ${plural(x.orders, 'order')}`).join('') : (d.event ? '<br>' + esc(d.event) : ''));
+}
+
+function calendar(nights, maxSales) {
   if (!nights.length) return '';
   const byDate = new Map(nights.map(d => [d.date, d]));
-  const live = liveDate(v);
   const first = dateObj(nights[0].date), last = dateObj(nights[nights.length - 1].date);
   const months = [];
   for (let y = first.getFullYear(), mo = first.getMonth(); y < last.getFullYear() || (y === last.getFullYear() && mo <= last.getMonth()); mo === 11 ? (y++, mo = 0) : mo++) months.push([y, mo]);
@@ -73,9 +112,8 @@ function calendar(nights, maxSales, v) {
       const iso = `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const d = byDate.get(iso);
       if (!d) { cells.push(`<span class="vr-c vr-none">${day}</span>`); continue; }
-      const s = netOf(d, v), o = Number(d.orders) || 0, lv = o > 0 ? level(s) : 0;
-      const tip = `<b>${esc(dayName(iso))}</b>${iso === live ? ' · live' : ''}<br>${o ? `${money(s)} sales · ${plural(o, 'order')}` : 'Open, no sales'} · ${plural(Number(d.photos) || 0, 'photo')}${d.event ? '<br>' + esc(d.event) : ''}`;
-      cells.push(`<button type="button" class="vr-c vr-l${lv}${o ? '' : ' vr-zero'}${iso === rep.day ? ' vr-sel' : ''}${iso === live ? ' vr-today' : ''}" data-day="${iso}" data-tip="${esc(tip)}" aria-label="${esc(dayName(iso) + ': ' + (o ? money(s) + ', ' + plural(o, 'order') : 'no sales'))}">${day}</button>`);
+      const lv = d.orders > 0 ? level(d.net) : 0;
+      cells.push(`<button type="button" class="vr-c vr-l${lv}${d.orders ? '' : ' vr-zero'}${iso === rep.day ? ' vr-sel' : ''}${d.live ? ' vr-today' : ''}" data-day="${iso}" data-tip="${esc(nightTip(d))}" aria-label="${esc(dayName(iso) + ': ' + (d.orders ? money(d.net) + ', ' + plural(d.orders, 'order') : 'no sales'))}">${day}</button>`);
     }
     return `<figure class="vr-month"><figcaption>${new Date(y, mo, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</figcaption>
       <div class="vr-wk">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(w => `<span>${w}</span>`).join('')}</div>
@@ -85,12 +123,12 @@ function calendar(nights, maxSales, v) {
   </div>`;
 }
 
-function weekdays(nights, v) {
+function weekdays(nights) {
   const w = Array.from({ length: 7 }, () => ({ s: 0, n: 0, open: 0 }));
   for (const d of nights) {
     const i = dateObj(d.date).getDay();
     w[i].open++;
-    if ((Number(d.orders) || 0) > 0) { w[i].s += netOf(d, v); w[i].n++; }
+    if (d.orders > 0) { w[i].s += d.net; w[i].n++; }
   }
   const max = Math.max(0, ...w.map(x => x.s));
   const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -103,58 +141,105 @@ function weekdays(nights, v) {
 
 function rankList(rows, cls, unit) {
   if (!rows.length) return '<p class="vr-none-txt">None sold</p>';
-  const max = Math.max(...rows.map(r => r.n));
-  return `<ol class="bars">${rows.map(r => `<li class="bar-row vr-rank"><span class="bar-name" title="${esc(r.name)}">${esc(r.name)}</span><span class="bar-track"><span class="bar ${cls}" style="width:${Math.max(1.5, r.n / max * 100)}%"></span></span><span class="bar-val">${num(r.n)}${unit ? ' ' + unit : ''}</span></li>`).join('')}</ol>`;
+  const max = Math.max(...rows.map(r => r.qty));
+  return `<ol class="bars">${rows.map(r => `<li class="bar-row vr-rank"><span class="bar-name" title="${esc(r.name)}">${esc(r.name)}</span><span class="bar-track"><span class="bar ${cls}" style="width:${Math.max(1.5, r.qty / max * 100)}%"></span></span><span class="bar-val">${num(r.qty)}${unit ? ' ' + unit : ''}</span></li>`).join('')}</ol>`;
+}
+
+const mixStack = (m) => m && (m.pkgOrders + m.cartOrders)
+  ? `<span class="stack" title="${m.pkgOrders} package, ${m.cartOrders} à la carte">${m.pkgOrders ? `<span class="mix-pkg" style="flex-grow:${m.pkgOrders}"></span>` : ''}${m.cartOrders ? `<span class="mix-cart" style="flex-grow:${m.cartOrders}"></span>` : ''}</span><span class="vr-mixn">${m.pkgOrders} / ${m.cartOrders}</span>`
+  : '<span class="muted">—</span>';
+
+// Fleet only: one row per venue for the period shown; tap a row for that venue's report.
+function byVenue(per, day) {
+  const rows = per.map(({ v, nights }) => {
+    const f = day ? nights.filter(d => d.date === day) : nights;
+    const net = f.reduce((s, d) => s + d.net, 0), orders = f.reduce((s, d) => s + d.orders, 0);
+    return { v, net, orders, sold: f.filter(d => d.orders > 0).length, open: f.length, mix: mergeMix(f.map(d => d.mix)) };
+  }).filter(r => r.open).sort((a, b) => (counts(b.v) - counts(a.v)) || b.net - a.net || byName(a.v, b.v));
+  if (!rows.length) return '<p class="vr-none-txt">No venue reported this night.</p>';
+  const max = Math.max(0, ...rows.filter(r => counts(r.v)).map(r => r.net));
+  return `<div class="vr-table-wrap"><table class="vr-table vr-venues">
+    <thead><tr><th>Venue</th><th>Sales</th><th>Orders</th><th>Avg</th>${day ? '' : '<th>Nights sold</th>'}<th class="vr-mixh">Packages / à la carte</th><th>Upsells</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.orders ? '' : 'vr-dim'}" data-venue="${esc(keyOf(r.v))}" tabindex="0" title="Open ${esc(r.v.venue)}'s report">
+      <td><span class="vr-vname">${esc(shortName(r.v))}</span>${counts(r.v) ? '' : ' <span class="vr-excl">not in totals</span>'}
+        ${counts(r.v) && max > 0 ? `<span class="vr-share"><span style="width:${Math.max(1, r.net / max * 100)}%"></span></span>` : ''}</td>
+      <td class="nowrap">${r.orders ? money(r.net) : '—'}</td>
+      <td>${num(r.orders)}</td>
+      <td class="nowrap">${avgText(r.net, r.orders, true)}</td>
+      ${day ? '' : `<td>${r.sold} of ${r.open}</td>`}
+      <td><div class="vr-mixc">${mixStack(r.mix)}</div></td>
+      <td>${r.mix && r.mix.upAmount ? dollars(r.mix.upAmount) : '—'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function renderReport() {
   if (RP.hidden || !rep.key) return;
-  const v = lastVenues.find(x => keyOf(x) === rep.key);
-  $('vr-title').textContent = v ? v.venue : 'Venue';
-  if (!v) { RP_BODY.innerHTML = '<p class="vr-none-txt">This venue isn\'t reporting right now.</p>'; return; }
-  const all = venueNights(v);
-  const inScope = rep.scope === 'event' && v.event ? all.filter(d => d.event === v.event) : all;
+  const fleet = rep.key === FLEET;
+  const v = fleet ? null : lastVenues.find(x => keyOf(x) === rep.key);
+  $('vr-title').textContent = fleet ? 'Fleet sales report' : v ? v.venue : 'Venue';
+  if (!fleet && !v) { RP_BODY.innerHTML = '<p class="vr-none-txt">This venue isn\'t reporting right now.</p>'; return; }
+
+  let all, inScope, per = null;
+  if (fleet) {
+    all = fleetNights('all').nights;
+    const f = fleetNights(rep.scope);
+    inScope = f.nights; per = f.per;
+  } else {
+    all = venueNights(v);
+    inScope = rep.scope === 'event' && v.event ? all.filter(d => d.event === v.event) : all;
+  }
   if (rep.day && !inScope.some(d => d.date === rep.day)) rep.day = null;
   const focus = rep.day ? inScope.filter(d => d.date === rep.day) : inScope;
-  const sold = (d) => (Number(d.orders) || 0) > 0;
-  const sales = focus.reduce((s, d) => s + netOf(d, v), 0), tax = focus.reduce((s, d) => s + (taxOf(d, v) || 0), 0);
-  const orders = focus.reduce((s, d) => s + (Number(d.orders) || 0), 0), photos = focus.reduce((s, d) => s + (Number(d.photos) || 0), 0);
-  const soldNights = inScope.filter(sold);
-  const best = soldNights.slice().sort((a, b) => netOf(b, v) - netOf(a, v))[0];
-  const mix = sumMix(focus);
-  const period = rep.day ? dayName(rep.day) : rep.scope === 'event' ? 'this event' : 'all reported dates';
-  const noTax = taxOf(v.today, v) === null;
-  const maxNight = Math.max(0, ...inScope.map(d => netOf(d, v)));
+  const sum = (k) => focus.reduce((s, d) => s + (d[k] || 0), 0);
+  const sales = sum('net'), tax = sum('tax'), orders = sum('orders'), photos = sum('photos');
+  const soldNights = inScope.filter(d => d.orders > 0);
+  const best = soldNights.slice().sort((a, b) => b.net - a.net)[0];
+  const mix = mergeMix(focus.map(d => d.mix));
+  const scopeName = rep.scope === 'event' ? (fleet ? 'current events' : 'this event') : 'all reported dates';
+  const period = rep.day ? dayName(rep.day) : scopeName;
+  const maxNight = Math.max(0, ...inScope.map(d => d.net));
+  const excluded = lastVenues.filter(x => !counts(x)).map(shortName);
+  const taxMissing = fleet ? lastVenues.filter(x => counts(x) && taxOf(x.today, x) === null).map(shortName) : [];
+  const noTax = fleet ? taxMissing.length > 0 : taxOf(v.today, v) === null;
   const stat = (label, value, sub) => `<div class="vr-stat"><div class="tile-label">${label}</div><div class="vr-val">${esc(value)}</div><div class="tile-sub">${sub}</div></div>`;
   const totalMixOrders = mix ? mix.pkgOrders + mix.cartOrders : 0;
-  const cartRows = mix ? mix.prints.map(r => ({ name: r.name + ' print', n: r.n })).concat(mix.digitals ? [{ name: 'Digital', n: mix.digitals }] : [], mix.bundles ? [{ name: 'Bundle', n: mix.bundles }] : []).sort((a, b) => b.n - a.n) : [];
+  const cartRows = mix ? mix.prints.map(r => ({ name: r.name + ' print', qty: r.qty })).concat(mix.digitals ? [{ name: 'Digital', qty: mix.digitals }] : [], mix.bundles ? [{ name: 'Bundle', qty: mix.bundles }] : []).sort((a, b) => b.qty - a.qty) : [];
   const nightsRows = inScope.slice().reverse();
+  const meta = fleet
+    ? `${plural(lastVenues.filter(counts).length, 'venue')} added together${excluded.length ? ` · excl. ${esc(excluded.join(', '))}` : ''}${all.length ? ` · reports from ${esc(shortDay(all[0].date))}` : ''}`
+    : `${v.event ? esc(v.event) + ' · ' : ''}${all.length ? `reports from ${esc(shortDay(all[0].date))}` : 'no history yet'}${counts(v) ? '' : ' · <span class="not-total">not in fleet totals</span>'}`;
 
   RP_BODY.innerHTML = `
-    <div class="vr-meta">${v.event ? esc(v.event) + ' · ' : ''}${all.length ? `reports from ${esc(shortDay(all[0].date))}` : 'no history yet'}${counts(v) ? '' : ' · <span class="not-total">not in fleet totals</span>'}</div>
+    ${rep.from === FLEET && !fleet ? '<button type="button" class="vr-back" data-back>← Fleet sales report</button>' : ''}
+    <div class="vr-meta">${meta}</div>
     <div class="vr-bar">
       <div class="hist-controls" role="group" aria-label="Period">
         <button type="button" data-vs="all" aria-pressed="${rep.scope === 'all'}">All dates</button>
-        <button type="button" data-vs="event" aria-pressed="${rep.scope === 'event'}"${v.event ? '' : ' disabled'}>This event</button>
+        <button type="button" data-vs="event" aria-pressed="${rep.scope === 'event'}"${fleet || v.event ? '' : ' disabled'}>${fleet ? 'Current events' : 'This event'}</button>
       </div>
       ${rep.day ? `<button type="button" class="vr-chip" data-vday="">${esc(dayName(rep.day))} <span aria-hidden="true">×</span><span class="sr">show all nights</span></button>` : '<span class="vr-hint">Tap a night to see just that night</span>'}
     </div>
 
     <div class="vr-stats">
-      ${stat('Sales', money(sales), `no tax${noTax ? ' (venue not sending tax yet)' : ` · ${money(tax)} tax`}`)}
+      ${stat('Sales', money(sales), `no tax · ${money(tax)} tax${noTax ? (fleet ? ` · tax still in: ${esc(taxMissing.join(', '))}` : ' (venue not sending tax yet)') : ''}`)}
       ${stat('Orders', num(orders), `avg ${avgText(sales, orders)} · ${saleRate(orders, photos)} photo→sale`)}
-      ${rep.day ? stat('Photos', num(photos), esc(focus[0] && focus[0].event || '')) : stat('Nights with a sale', `${soldNights.length} of ${inScope.length}`, best ? `best ${esc(shortDay(best.date))} · ${dollars(netOf(best, v))}` : 'no sales yet')}
+      ${rep.day ? stat('Photos', num(photos), fleet ? plural(focus[0] ? focus[0].by.filter(x => x.orders > 0).length : 0, 'venue') + ' with sales' : esc(focus[0] && focus[0].event || ''))
+        : stat('Nights with a sale', `${soldNights.length} of ${inScope.length}`, best ? `best ${esc(shortDay(best.date))} · ${dollars(best.net)}` : 'no sales yet')}
       ${stat('Upsells', mix ? dollars(mix.upAmount) : '—', mix ? `${plural(mix.upItems, 'item')}${mix.pkgWithExtras ? ` · ${num(mix.pkgWithExtras)} pkg orders added extras` : ''}` : 'not reported')}
     </div>
 
+    ${fleet ? `<section class="vr-sec">
+      <h3>By venue <span class="vr-sub">${esc(period)} · tap a venue for its report</span></h3>
+      ${byVenue(per, rep.day)}
+    </section>` : ''}
+
     <section class="vr-sec">
-      <h3>Sale nights <span class="vr-sub">${esc(rep.scope === 'event' ? 'this event' : 'all reported dates')}</span></h3>
-      ${inScope.length ? calendar(inScope, maxNight, v) + `<h4>By night of the week</h4>${weekdays(inScope, v)}` : '<p class="vr-none-txt">No nights reported yet. Past nights appear once the venue sends its daily history.</p>'}
+      <h3>Sale nights <span class="vr-sub">${esc(scopeName)}${fleet ? ' · whole fleet' : ''}</span></h3>
+      ${inScope.length ? calendar(inScope, maxNight) + `<h4>By night of the week</h4>${weekdays(inScope)}` : '<p class="vr-none-txt">No nights reported yet. Past nights appear once venues send their daily history.</p>'}
     </section>
 
     <section class="vr-sec">
       <h3>What sold <span class="vr-sub">${esc(period)}</span></h3>
-      ${!mix ? '<p class="vr-none-txt">This venue hasn\'t sent its sales mix for these nights.</p>' : !totalMixOrders ? '<p class="vr-none-txt">No sales.</p>' : `
+      ${!mix ? `<p class="vr-none-txt">${fleet ? 'No venue has' : 'This venue hasn\'t'} sent its sales mix for these nights.</p>` : !totalMixOrders ? '<p class="vr-none-txt">No sales.</p>' : `
         ${splitBar(mix.pkgOrders, mix.cartOrders)}
         <div class="vr-cols">
           <figure class="chart"><figcaption><i class="sw sw-pkg"></i>Packages <span class="vr-sub">${plural(mix.pkgOrders, 'order')}</span></figcaption>${rankList(mix.packages, 'bar-pkg', 'sold')}</figure>
@@ -166,29 +251,31 @@ function renderReport() {
     <section class="vr-sec">
       <h3>Night by night</h3>
       ${nightsRows.length ? `<div class="vr-table-wrap"><table class="vr-table">
-        <thead><tr><th>Night</th><th>Orders</th><th class="vr-mixh">Packages / à la carte</th><th>Sales</th><th>Upsells</th><th>Photos</th></tr></thead>
-        <tbody>${nightsRows.map(d => {
-          const m = salesOf(d), o = Number(d.orders) || 0;
-          return `<tr class="${o ? '' : 'vr-dim'}${d.date === rep.day ? ' vr-row-sel' : ''}" data-day="${d.date}" tabindex="0">
-            <td class="nowrap">${esc(dayName(d.date))}${d.date === liveDate(v) ? ' <span class="vr-live">live</span>' : ''}</td>
-            <td>${num(o)}</td>
-            <td><div class="vr-mixc">${m && (m.pkgOrders + m.cartOrders) ? `<span class="stack" title="${m.pkgOrders} package, ${m.cartOrders} à la carte">${m.pkgOrders ? `<span class="mix-pkg" style="flex-grow:${m.pkgOrders}"></span>` : ''}${m.cartOrders ? `<span class="mix-cart" style="flex-grow:${m.cartOrders}"></span>` : ''}</span><span class="vr-mixn">${m.pkgOrders} / ${m.cartOrders}</span>` : '<span class="muted">—</span>'}</div></td>
-            <td class="nowrap">${o ? money(netOf(d, v)) : '—'}</td>
-            <td>${m && m.upAmount ? dollars(m.upAmount) : '—'}</td>
-            <td>${num(d.photos)}</td></tr>`;
-        }).join('')}</tbody></table></div>` : '<p class="vr-none-txt">Nothing yet.</p>'}
+        <thead><tr><th>Night</th>${fleet ? '<th>Venues</th>' : ''}<th>Orders</th><th class="vr-mixh">Packages / à la carte</th><th>Sales</th><th>Upsells</th><th>Photos</th></tr></thead>
+        <tbody>${nightsRows.map(d => `<tr class="${d.orders ? '' : 'vr-dim'}${d.date === rep.day ? ' vr-row-sel' : ''}" data-day="${d.date}" tabindex="0"${fleet ? ` data-tip="${esc(nightTip(d))}"` : ''}>
+            <td class="nowrap">${esc(dayName(d.date))}${d.live ? ' <span class="vr-live">live</span>' : ''}</td>
+            ${fleet ? `<td>${d.by.filter(x => x.orders > 0).length}</td>` : ''}
+            <td>${num(d.orders)}</td>
+            <td><div class="vr-mixc">${mixStack(d.mix)}</div></td>
+            <td class="nowrap">${d.orders ? money(d.net) : '—'}</td>
+            <td>${d.mix && d.mix.upAmount ? dollars(d.mix.upAmount) : '—'}</td>
+            <td>${num(d.photos)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="vr-none-txt">Nothing yet.</p>'}
     </section>`;
 }
 
-// Open from the card button
+// Open: card button (one venue) or the rail launcher (fleet)
 $('grid').addEventListener('click', (e) => {
   const b = e.target.closest('.vr-btn');
   if (!b) return;
   const card = b.closest('.card');
   if (card) openReport(card.dataset.key);
 });
+$('fleet-report').addEventListener('click', () => openReport(FLEET));
 RP.addEventListener('click', (e) => {
   if (e.target.closest('.fly-close') || e.target === RP) return closeReport();
+  if (e.target.closest('[data-back]')) return openReport(FLEET);
+  const vr = e.target.closest('[data-venue]');
+  if (vr) { const day = rep.day; openReport(vr.dataset.venue, FLEET); if (day) { rep.day = day; renderReport(); } return; }
   const s = e.target.closest('[data-vs]');
   if (s && !s.disabled) { rep.scope = s.dataset.vs; rep.day = null; return renderReport(); }
   const d = e.target.closest('[data-day], [data-vday]');
@@ -200,7 +287,7 @@ RP.addEventListener('click', (e) => {
   }
 });
 RP.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.matches('tr[data-day]')) e.target.click();
+  if (e.key === 'Enter' && e.target.matches('tr[data-day], tr[data-venue]')) e.target.click();
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeReport(); });
 RP_BODY.addEventListener('pointerover', (e) => { const c = e.target.closest('[data-tip]'); if (c) showTip(c); });

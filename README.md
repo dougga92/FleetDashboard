@@ -69,6 +69,11 @@ upsells; and a night-by-night table. Choose **All dates** or **This event**; tap
 a night (calendar or table) to narrow everything to that night. Opened while the
 board shows a past date, it starts on that night. Code: `public/report.js`.
 
+**Sales report** in the left rail is the same report for the whole fleet: every
+venue's nights added together (minus `TOTALS_EXCLUDE` venues, like the tiles),
+**All dates** or **Current events** (each venue's current event), plus a **By
+venue** table; tap a venue there to open its own report (← Fleet goes back).
+
 ## Sales tax (true revenue)
 
 Venue prices **include** sales tax, so `revenue` is what customers paid. The
