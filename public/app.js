@@ -453,6 +453,7 @@ function card(v, sale) {
 
       ${salesBlock(v)}
       <div class="card-tools">
+        <button type="button" class="vr-btn" title="Everything this venue sold, night by night">📊 Sales report</button>
         ${rustdeskBlock(v)}
         ${lastSaleChip(v)}
       </div>
@@ -1019,6 +1020,7 @@ function renderView() {
   renderCharts(shownVenues());
   renderSelling();
   renderHistory();
+  if (typeof renderReport === 'function') renderReport();   // report.js
   $('empty').hidden = lastVenues.length > 0;
 }
 

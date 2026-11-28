@@ -59,6 +59,16 @@ carte per venue, upsells per venue, top packages and à la carte items. Colours:
 packages `#3987e5`, à la carte `#d95926`, upsells `#199e70` (validated on both
 dark surfaces).
 
+## Venue sales report
+Each card has a **📊 Sales report** button. It opens a panel from the right with
+everything that venue sold, built from its `days` history (the live night uses
+the heartbeat `today`): sales (no tax), orders, nights with a sale, upsells; a
+month calendar with each night shaded by its sales (dashed = open, no sale); sales
+by night of the week; packages vs à la carte, each package, à la carte items and
+upsells; and a night-by-night table. Choose **All dates** or **This event**; tap
+a night (calendar or table) to narrow everything to that night. Opened while the
+board shows a past date, it starts on that night. Code: `public/report.js`.
+
 ## Sales tax (true revenue)
 
 Venue prices **include** sales tax, so `revenue` is what customers paid. The

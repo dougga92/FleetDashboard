@@ -1,6 +1,6 @@
 {
   "name": "fotomentum-fleet-dashboard",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "description": "Live status board for the EventPhotos / Fotomentum venue fleet. Venues POST aggregate heartbeats; this shows them live.",
   "main": "server.js",
